@@ -74,9 +74,17 @@ export class EngineWrapper {
   }
 }
 
-export async function createStockfishWorker(): Promise<EngineWrapper> {
-  const worker = new Worker("/stockfish.js");
-  const wrapper = new EngineWrapper(worker);
-  await wrapper.init(); 
-  return wrapper;
+export function createStockfishWorker(): Promise<EngineWrapper> {
+  return new Promise((resolve) => {
+    // Use your wrapper worker file, not the raw stockfish.js
+    const worker = new Worker("/stockfish.worker.js");
+
+    worker.onmessage = (event) => {
+      if (event.data === "uciok") {
+        resolve(new EngineWrapper(worker));
+      }
+    };
+
+    worker.postMessage("uci");
+  });
 }
