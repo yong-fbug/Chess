@@ -77,6 +77,6 @@ export class EngineWrapper {
 export async function createStockfishWorker(): Promise<EngineWrapper> {
   const worker = new Worker("/stockfish.js");
   const wrapper = new EngineWrapper(worker);
-  await wrapper.init(); // <-- critical to actually initialize
+  await wrapper.init(); 
   return wrapper;
 }
