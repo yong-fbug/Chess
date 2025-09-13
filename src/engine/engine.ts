@@ -34,7 +34,6 @@ export class EngineWrapper {
 
   private onMessage(e: MessageEvent) {
     const text = e.data as string;
-    if (typeof text !== "string") return;
     if (text.startsWith("info")) this.lastInfo = text;
     if (text.startsWith("bestmove") && this.pendingResolve) {
       this.pendingResolve(text);
@@ -75,16 +74,9 @@ export class EngineWrapper {
   }
 }
 
-export function createStockfishWorker(): Promise<EngineWrapper> {
-  return new Promise((resolve) => {
-    const worker = new Worker("/stockfish.worker.js");
-
-    worker.onmessage = (event) => {
-      if (event.data === "uciok") {
-        resolve(new EngineWrapper(worker));
-      }
-    };
-
-    worker.postMessage("uci");
-  });
+export async function createStockfishWorker(): Promise<EngineWrapper> {
+  const worker = new Worker("/stockfish.js");
+  const wrapper = new EngineWrapper(worker);
+  await wrapper.init();
+  return wrapper;
 }
