@@ -39,7 +39,7 @@ export default function PreGameModal({ onStart }: Props) {
           {/* Header */}
           <div className="flex items-center justify-center gap-2 mb-6">
             <span className="text-xl font-bold text-white tracking-wide">
-              ♟️ ChessForge™
+              ♟️ FCHESS™
             </span>
           </div>
 
