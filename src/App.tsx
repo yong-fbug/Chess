@@ -29,6 +29,10 @@ export default function App() {
     null
   );
   const [showPreGameModal, setShowPreGameModal] = useState(false);
+  const [engineLastMove, setEngineLastMove] = useState<{
+    from: string;
+    to: string;
+  } | null>(null);
 
   // Initialize Stockfish
   useEffect(() => {
@@ -93,34 +97,41 @@ export default function App() {
         to: ai.bestTo,
         promotion: ai.bestPromotion,
       } as Move);
+
       if (move) setMoveHistory((prev) => [...prev, move]);
       setFen(chess.fen());
       setTurn(chess.turn());
       setLastMoveLabel(ai.best || null);
+
+      // show engine move trail for 1s
+      setEngineLastMove({ from: ai.bestFrom, to: ai.bestTo });
+      setTimeout(() => setEngineLastMove(null), 1000);
+
       await updateEval();
     }
 
     if (chess.isGameOver()) setGameOver(true);
   };
 
-  const classifyAndMaybeAi = async (
+  const classifyAndMaybeAi = (
     from: string,
     to: string,
     promotion?: string
-  ) => {
-    if (!playerSide || !engineReady || gameOver) return;
+  ): boolean => {
     const chess = chessRef.current;
-    if (chess.turn() !== playerSide) return;
+    if (chess.turn() !== playerSide) return false;
 
     const move = chess.move({ from, to, promotion } as Move);
-    if (!move) return;
+    if (!move) return false;
 
     setMoveHistory((prev) => [...prev, move]);
     setFen(chess.fen());
     setTurn(chess.turn());
     setLastMoveLabel(move.san);
-    await updateEval();
+
     setTimeout(() => maybeAiMove(), 500);
+
+    return true;
   };
 
   const showHint = async () => {
@@ -206,6 +217,7 @@ export default function App() {
           currentTurn={turn}
           isAiThinking={isAiThinking}
           hintMove={hintMove}
+          engineMove={engineLastMove} // ✅ new prop
         />
       </div>
 
