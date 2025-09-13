@@ -34,6 +34,7 @@ export class EngineWrapper {
 
   private onMessage(e: MessageEvent) {
     const text = e.data as string;
+    if (typeof text !== "string") return;
     if (text.startsWith("info")) this.lastInfo = text;
     if (text.startsWith("bestmove") && this.pendingResolve) {
       this.pendingResolve(text);
@@ -76,7 +77,6 @@ export class EngineWrapper {
 
 export function createStockfishWorker(): Promise<EngineWrapper> {
   return new Promise((resolve) => {
-    // Use your wrapper worker file, not the raw stockfish.js
     const worker = new Worker("/stockfish.worker.js");
 
     worker.onmessage = (event) => {

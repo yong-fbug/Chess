@@ -1,14 +1,14 @@
-importScripts("stockfish.js");
+// Worker runs in its own context, so no exports here!
+importScripts("/stockfish.js");
 
-// Forward messages between worker <-> main thread
-onmessage = (e) => {
+onmessage = function (e) {
   if (self.STOCKFISH) {
     STOCKFISH.postMessage(e.data);
   }
 };
 
 if (typeof STOCKFISH !== "undefined") {
-  STOCKFISH.onmessage = (event) => {
+  STOCKFISH.onmessage = function (event) {
     postMessage(event.data);
   };
 }
