@@ -1,9 +1,11 @@
 import { Chessboard, ChessboardOptions } from "react-chessboard";
 
+type HintMove = { from: string; to: string } | null;
+
 type Props = {
   fen: string;
   onPlayerMove: (from: string, to: string, promotion?: string) => void;
-  hintMove?: string | null;
+  hintMove?: HintMove;
   playerSide: "w" | "b";
   currentTurn: "w" | "b";
   isAiThinking: boolean;
@@ -19,11 +21,10 @@ export default function Board({
 }: Props) {
   const squareStyles: { [square: string]: { backgroundColor: string } } = {};
 
-  if (hintMove && hintMove.length >= 4) {
-    const from = hintMove.slice(0, 2);
-    const to = hintMove.slice(2, 4);
-    squareStyles[from] = { backgroundColor: "rgba(0,255,0,0.4)" };
-    squareStyles[to] = { backgroundColor: "rgba(0,255,0,0.4)" };
+  // Highlight hint squares
+  if (hintMove) {
+    squareStyles[hintMove.from] = { backgroundColor: "rgba(0,255,0,0.4)" };
+    squareStyles[hintMove.to] = { backgroundColor: "rgba(0,255,0,0.4)" };
   }
 
   const options: ChessboardOptions = {
@@ -50,19 +51,14 @@ export default function Board({
       );
       return true;
     },
-    squareStyles,
+    squareStyles, // ✅ use this prop
     darkSquareStyle: { backgroundColor: "#b58863" },
     lightSquareStyle: { backgroundColor: "#f0d9b5" },
   };
 
   return (
-    <div className="w-full max-w-[90vmin] aspect-square mx-auto">
-      <Chessboard
-        options={{
-          ...options,
-          boardWidth: undefined, // let container control width
-        }}
-      />
+    <div className="w-[73vmin] aspect-square mx-auto">
+      <Chessboard options={options} />
     </div>
   );
 }
