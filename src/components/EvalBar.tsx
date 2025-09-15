@@ -6,12 +6,23 @@ type Props = {
 };
 
 export default function EvalBar({ score, playerSide }: Props) {
-  if (!score) return null;
+  if (!score) {
+    // Neutral bar when no score yet
+    return (
+      <div className="flex flex-col items-center mb-2 h-[73vmin]">
+        <div className="relative h-full w-5 bg-gray-800 rounded-md overflow-hidden shadow-md">
+          <div className="absolute bottom-0 left-0 w-full h-1/2 bg-white" />
+          <div className="absolute top-0 left-0 w-full h-1/2 bg-black" />
+        </div>
+        <div className="text-xs font-mono text-gray-200 mt-1">—</div>
+      </div>
+    );
+  }
 
   let cp = score.cp ?? 0;
   let mate = score.mate;
 
-  // Flip for black so perspective is always from player
+  // Flip eval numbers for black player
   if (playerSide === "b") {
     cp = -cp;
     if (mate !== undefined) mate = -mate;
@@ -19,7 +30,6 @@ export default function EvalBar({ score, playerSide }: Props) {
 
   // Percentage for bar fill
   let percent: number;
-
   if (mate !== undefined) {
     percent = mate > 0 ? 100 : 0; // full bar if mate
   } else {
@@ -29,18 +39,33 @@ export default function EvalBar({ score, playerSide }: Props) {
   }
 
   return (
-    <div className="flex flex-col items-center mb-2 w-[75vmin]">
-      <div className="relative w-full h-5 bg-gray-800 rounded-md overflow-hidden shadow-md">
-        {/* White side (left fill) */}
-        <div
-          className="absolute top-0 left-0 h-full bg-white transition-all duration-300 ease-in-out"
-          style={{ width: `${percent}%` }}
-        />
-        {/* Black side (right remaining) */}
-        <div
-          className="absolute top-0 right-0 h-full bg-black"
-          style={{ width: `${100 - percent}%` }}
-        />
+    <div className="flex flex-col items-center mb-2 h-[73vmin]">
+      <div className="relative h-full w-5 bg-gray-800 rounded-md overflow-hidden shadow-md">
+        {playerSide === "w" ? (
+          <>
+            {/* White at bottom */}
+            <div
+              className="absolute bottom-0 left-0 w-full bg-white transition-all duration-300 ease-in-out"
+              style={{ height: `${percent}%` }}
+            />
+            <div
+              className="absolute top-0 left-0 w-full bg-black"
+              style={{ height: `${100 - percent}%` }}
+            />
+          </>
+        ) : (
+          <>
+            {/* Black at bottom */}
+            <div
+              className="absolute bottom-0 left-0 w-full bg-black transition-all duration-300 ease-in-out"
+              style={{ height: `${100 - percent}%` }}
+            />
+            <div
+              className="absolute top-0 left-0 w-full bg-white"
+              style={{ height: `${percent}%` }}
+            />
+          </>
+        )}
       </div>
       <div className="text-xs font-mono text-gray-200 mt-1">
         {mate !== undefined

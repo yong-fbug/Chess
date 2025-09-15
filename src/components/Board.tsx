@@ -1,5 +1,6 @@
 import { Chessboard, ChessboardOptions } from "react-chessboard";
 import { useState } from "react";
+import PromotionModal from "./Promotional";
 
 type HintMove = { from: string; to: string } | null;
 
@@ -22,6 +23,11 @@ export default function Board({
   currentTurn,
   isAiThinking,
 }: Props) {
+  const [promotionSquare, setPromotionSquare] = useState<{
+    from: string;
+    to: string;
+  } | null>(null);
+
   const [invalidMove, setInvalidMove] = useState<HintMove | null>(null);
   const [lastMoveTrail, setLastMoveTrail] = useState<HintMove | null>(null);
 
@@ -31,19 +37,14 @@ export default function Board({
     squareStyles[engineMove.from] = { backgroundColor: "rgba(0,0,255,0.4)" };
     squareStyles[engineMove.to] = { backgroundColor: "rgba(0,0,255,0.4)" };
   }
-  // Highlight hint squares
   if (hintMove) {
     squareStyles[hintMove.from] = { backgroundColor: "rgba(0,255,0,0.4)" };
     squareStyles[hintMove.to] = { backgroundColor: "rgba(0,255,0,0.4)" };
   }
-
-  // Highlight invalid move attempt
   if (invalidMove) {
     squareStyles[invalidMove.from] = { backgroundColor: "rgba(255,0,0,0.5)" };
     squareStyles[invalidMove.to] = { backgroundColor: "rgba(255,0,0,0.5)" };
   }
-
-  // Highlight last move trail
   if (lastMoveTrail) {
     squareStyles[lastMoveTrail.from] = {
       backgroundColor: "rgba(255,255,0,0.4)",
@@ -59,29 +60,26 @@ export default function Board({
       if (isAiThinking) return false;
       if (currentTurn !== playerSide) return false;
 
-      let promotion: string | undefined;
       const pieceType = String(piece)[1].toLowerCase();
       if (
         pieceType === "p" &&
         (targetSquare[1] === "8" || targetSquare[1] === "1")
       ) {
-        promotion = "q";
+        setPromotionSquare({ from: sourceSquare, to: targetSquare });
+        return false; // wait for modal
       }
 
       const valid = onPlayerMove(
         sourceSquare.toLowerCase(),
-        targetSquare.toLowerCase(),
-        promotion
+        targetSquare.toLowerCase()
       );
 
-      // Show invalid move red highlight for 0.5s
       if (!valid) {
         setInvalidMove({ from: sourceSquare, to: targetSquare });
         setTimeout(() => setInvalidMove(null), 500);
         return false;
       }
 
-      // Show last move trail yellow
       setLastMoveTrail({ from: sourceSquare, to: targetSquare });
       setTimeout(() => setLastMoveTrail(null), 1000);
 
@@ -93,8 +91,21 @@ export default function Board({
   };
 
   return (
-    <div className="w-[73vmin] aspect-square mx-auto">
+    <>
       <Chessboard options={options} />
-    </div>
+      {promotionSquare && (
+        <PromotionModal
+          side={playerSide}
+          onSelect={(piece) => {
+            onPlayerMove(
+              promotionSquare.from.toLowerCase(),
+              promotionSquare.to.toLowerCase(),
+              piece
+            );
+            setPromotionSquare(null);
+          }}
+        />
+      )}
+    </>
   );
 }
