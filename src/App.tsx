@@ -66,6 +66,7 @@ export default function App() {
     })();
     return () => {
       mounted = false;
+      engineRef.current?.terminate();
     };
   }, []);
 
