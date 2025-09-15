@@ -21,7 +21,6 @@ const openingBook: Record<
     { from: "e7", to: "e5" },
     { from: "c7", to: "c5" },
   ],
-  // Add more book moves here
 };
 
 export default function App() {
@@ -35,12 +34,14 @@ export default function App() {
   const [engineReady, setEngineReady] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [_, setLastMoveLabel] = useState<string | null>(null);
-  const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<
-    string | null
-  >(null);
-  const [engineLastMoveFeedback, setEngineLastMoveFeedback] = useState<
-    string | null
-  >(null);
+  const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<{
+    label: string;
+    color: string;
+  } | null>(null);
+  const [engineLastMoveFeedback, setEngineLastMoveFeedback] = useState<{
+    label: string;
+    color: string;
+  } | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [aiLevel, setAiLevel] = useState(6);
   const [evalScore, setEvalScore] = useState<EvalScore | null>(null);
@@ -54,13 +55,7 @@ export default function App() {
   } | null>(null);
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
-  //disabled the pre-game modal
-  // useEffect(() => {
-  //   if (!playerSide && !aiSide) handleStartGame("w", 6);
-  // }, [playerSide, aiSide]);
-
   // --- Initialize Stockfish ---
-  // App.tsx
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -115,30 +110,20 @@ export default function App() {
 
     if (matePlayed !== undefined) {
       if (mateBest !== undefined && matePlayed !== mateBest)
-        return `Missed Mate in ${mateBest}`;
-      return `Mate in ${matePlayed}`;
+        return {
+          label: `Missed Mate in ${mateBest}`,
+          color: "text-orange-500",
+        };
+      return { label: `Mate in ${matePlayed}`, color: "text-red-500" };
     }
 
     const delta = cpBest - cpPlayed;
-    if (delta <= 10) return "Best move";
-    if (delta <= 30) return "Excellent";
-    if (delta <= 50) return "Good";
-    if (delta <= 150) return "Inaccuracy";
-    if (delta <= 300) return "Mistake";
-    return "Blunder";
-  };
-
-  // --- feedback color ---
-  const feedbackColor = (feedback: string) => {
-    if (feedback === "(Book)") return "text-blue-400"; // Book moves in blue
-    if (feedback.includes("Best move")) return "text-green-400";
-    if (feedback.includes("Excellent")) return "text-green-300";
-    if (feedback.includes("Good")) return "text-green-200";
-    if (feedback.includes("Inaccuracy")) return "text-orange-400";
-    if (feedback.includes("Mistake")) return "text-orange-600";
-    if (feedback.includes("Blunder")) return "text-red-400";
-    if (feedback.includes("Missed Mate")) return "text-red-500";
-    return "text-gray-300";
+    if (delta <= 10) return { label: "Best move", color: "text-cyan-400" };
+    if (delta <= 30) return { label: "Excellent", color: "text-green-400" };
+    if (delta <= 50) return { label: "Good", color: "text-lime-400" };
+    if (delta <= 100) return { label: "Inaccuracy", color: "text-yellow-400" };
+    if (delta <= 300) return { label: "Mistake", color: "text-orange-400" };
+    return { label: "Blunder", color: "text-red-400" };
   };
 
   // --- AI move ---
@@ -151,17 +136,15 @@ export default function App() {
       chess.turn() !== aiSide
     )
       return;
-
     setIsAiThinking(true);
 
-    // --- Check opening book ---
     const bookMoves = openingBook[chess.fen()];
     let move;
-    let feedback = "";
+    let feedback: { label: string; color: string } = { label: "", color: "" };
     if (bookMoves && bookMoves.length > 0) {
       const bookMove = bookMoves[Math.floor(Math.random() * bookMoves.length)];
       move = chess.move(bookMove as Move);
-      feedback = "(Book)";
+      feedback = { label: "(Book)", color: "text-blue-400" };
     } else {
       const ai = await engineRef.current.getBestAndScore(
         chess.fen(),
@@ -184,7 +167,7 @@ export default function App() {
       setFen(chess.fen());
       setTurn(chess.turn());
       setEngineLastMove({ from: move.from, to: move.to });
-      setEngineLastMoveFeedback(`${move.san} ${feedback}`);
+      setEngineLastMoveFeedback(feedback);
     }
 
     if (chess.isGameOver()) setGameOver(true);
@@ -222,7 +205,7 @@ export default function App() {
           analysis.score,
           playerSide!
         );
-        setPlayerLastMoveFeedback(`${move.san} ${feedback}`);
+        setPlayerLastMoveFeedback(feedback);
         setEvalScore(
           playerSide === "w"
             ? analysis.score
@@ -232,7 +215,6 @@ export default function App() {
               }
         );
       }
-
       setTimeout(() => maybeAiMove(), 500);
     })();
 
@@ -256,16 +238,16 @@ export default function App() {
   const undoMove = async () => {
     const chess = chessRef.current;
     if (moveHistory.length === 0 || gameOver) return;
-
     chess.undo();
     if (chess.turn() === aiSide && moveHistory.length >= 2) chess.undo();
-
     setMoveHistory((prev) => prev.slice(0, -2));
     setFen(chess.fen());
     setTurn(chess.turn());
     setLastMoveLabel(
       moveHistory.length >= 2 ? moveHistory[moveHistory.length - 2].san : null
     );
+    setPlayerLastMoveFeedback(null);
+    setEngineLastMoveFeedback(null);
     setGameOver(false);
     await updateEval();
   };
@@ -294,46 +276,32 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between overflow-hidden">
-      <div className="w-full text-center mt-2">
-        <div className="w-full text-center mt-2 flex flex-col items-center">
-          <div className="flex justify-center gap-4 mt-1 text-sm w-[400px] flex-shrink-0">
-            <span className="text-white font-semibold">
-              You:{" "}
-              <span
-                className={
-                  playerLastMoveFeedback
-                    ? feedbackColor(playerLastMoveFeedback)
-                    : "text-white"
-                }
-              >
-                {playerLastMoveFeedback ?? "—"}
-              </span>
-            </span>
-            <span className="text-white font-semibold">
-              Engine:{" "}
-              <span
-                className={
-                  engineLastMoveFeedback
-                    ? feedbackColor(engineLastMoveFeedback)
-                    : "text-white"
-                }
-              >
-                {engineLastMoveFeedback ?? "—"}
-              </span>
-            </span>
-          </div>
-        </div>
+      {/* Feedback */}
 
-        {gameOver && (
-          <p className="text-red-400 font-semibold transition-all duration-300 mt-2">
-            Game Over
-          </p>
-        )}
+      <div className="flex justify-center gap-4 mt-1 text-sm w-[400px] flex-shrink-0">
+        <span className="text-white font-semibold">
+          You:{" "}
+          <span className={playerLastMoveFeedback?.color ?? "text-white"}>
+            {playerLastMoveFeedback?.label ?? "—"}
+          </span>
+        </span>
+        <span className="text-white font-semibold">
+          Engine:{" "}
+          <span className={engineLastMoveFeedback?.color ?? "text-white"}>
+            {engineLastMoveFeedback?.label ?? "—"}
+          </span>
+        </span>
       </div>
+      {gameOver && (
+        <p className="text-red-400 font-semibold transition-all duration-300 mt-2">
+          Game Over
+        </p>
+      )}
 
+      {/* Board + EvalBar */}
       <div className="flex flex-1 justify-center items-center w-full max-w-screen-xl px-4">
-        <div className="flex flex-col md:flex-row items-center justify-center w-full">
-          <div className="mr-2 md:mr-4 flex-shrink-0 h-[50vmin] md:h-[60vmin]">
+        <div className="flex flex-col md:flex-row items-center justify-center w-full gap-4">
+          <div className="flex-shrink-0 h-[50vmin] md:h-[60vmin]">
             <EvalBar score={evalScore} playerSide={playerSide} />
           </div>
           <div className="w-full max-w-[500px] aspect-square">
@@ -350,6 +318,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Controls */}
       <div className="flex justify-center md:justify-center gap-2 w-full md:w-auto mt-6">
         <button
           onClick={showHint}
