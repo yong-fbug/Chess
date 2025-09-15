@@ -1,4 +1,3 @@
-// engine.ts
 export type EvalScore = { cp?: number; mate?: number };
 
 export class EngineWrapper {
@@ -109,10 +108,22 @@ export class EngineWrapper {
   }
 }
 
-// Singleton pattern to avoid multiple workers
-export async function createStockfishWorker(): Promise<EngineWrapper> {
-  const worker = new Worker("/stockfish.js");
-  const wrapper = new EngineWrapper(worker);
-  await wrapper.init();
-  return wrapper;
+// --- Singleton Engine with pending promise ---
+let engineInstance: EngineWrapper | null = null;
+let engineInitPromise: Promise<EngineWrapper> | null = null;
+
+export async function getEngine(): Promise<EngineWrapper> {
+  if (engineInstance) return engineInstance;
+  if (engineInitPromise) return engineInitPromise;
+
+  engineInitPromise = (async () => {
+    const worker = new Worker("/stockfish.js");
+    const wrapper = new EngineWrapper(worker);
+    await wrapper.init();
+    engineInstance = wrapper;
+    engineInitPromise = null;
+    return wrapper;
+  })();
+
+  return engineInitPromise;
 }
