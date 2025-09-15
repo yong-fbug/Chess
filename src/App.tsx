@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Chess, Move } from "chess.js";
-import { Undo, Flag, Pen } from "lucide-react";
+import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
 import PreGameModal from "./components/PreGameModal";
 import EvalBar from "./components/EvalBar";
@@ -9,6 +9,24 @@ import {
   createStockfishWorker,
   EvalScore,
 } from "./engine/engine";
+
+// --- Simple opening book ---
+const openingBook: Record<
+  string,
+  { from: string; to: string; promotion?: string }[]
+> = {
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": [
+    { from: "e2", to: "e4" },
+    { from: "d2", to: "d4" },
+    { from: "c2", to: "c4" },
+    { from: "g1", to: "f3" },
+  ],
+  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1": [
+    { from: "e7", to: "e5" },
+    { from: "c7", to: "c5" },
+  ],
+  // Add more book moves here
+};
 
 export default function App() {
   const chessRef = useRef(new Chess());
@@ -20,8 +38,13 @@ export default function App() {
   const [aiSide, setAiSide] = useState<"w" | "b" | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [lastMoveLabel, setLastMoveLabel] = useState<string | null>(null);
-  const [lastMoveFeedback, setLastMoveFeedback] = useState<string | null>(null);
+  const [_, setLastMoveLabel] = useState<string | null>(null);
+  const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<
+    string | null
+  >(null);
+  const [engineLastMoveFeedback, setEngineLastMoveFeedback] = useState<
+    string | null
+  >(null);
   const [gameOver, setGameOver] = useState(false);
   const [aiLevel, setAiLevel] = useState(6);
   const [evalScore, setEvalScore] = useState<EvalScore | null>(null);
@@ -34,6 +57,11 @@ export default function App() {
     to: string;
   } | null>(null);
   const [showPreGameModal, setShowPreGameModal] = useState(false);
+
+  //disabled the pre-game modal
+  // useEffect(() => {
+  //   if (!playerSide && !aiSide) handleStartGame("w", 6);
+  // }, [playerSide, aiSide]);
 
   // --- Initialize Stockfish ---
   useEffect(() => {
@@ -71,44 +99,6 @@ export default function App() {
     setEvalScore(score);
   }, [playerSide, aiLevel]);
 
-  // --- AI move ---
-  const maybeAiMove = useCallback(async () => {
-    const chess = chessRef.current;
-    if (
-      !engineRef.current ||
-      !aiSide ||
-      chess.isGameOver() ||
-      chess.turn() !== aiSide
-    )
-      return;
-
-    setIsAiThinking(true);
-    const ai = await engineRef.current.getBestAndScore(
-      chess.fen(),
-      Math.max(6, aiLevel)
-    );
-    setIsAiThinking(false);
-
-    if (ai.bestFrom && ai.bestTo) {
-      const move = chess.move({
-        from: ai.bestFrom,
-        to: ai.bestTo,
-        promotion: ai.bestPromotion,
-      } as Move);
-      if (move) {
-        setMoveHistory((prev) => [...prev, move]);
-        setFen(chess.fen());
-        setTurn(chess.turn());
-        setLastMoveLabel(move.san);
-        setEngineLastMove({ from: ai.bestFrom, to: ai.bestTo });
-        setTimeout(() => setEngineLastMove(null), 1000);
-        await updateEval();
-      }
-    }
-
-    if (chess.isGameOver()) setGameOver(true);
-  }, [aiSide, aiLevel, updateEval]);
-
   // --- Feedback logic ---
   const getMoveFeedback = (
     playedScore: EvalScore,
@@ -142,12 +132,73 @@ export default function App() {
     return "Blunder";
   };
 
-  // --- First AI move if player picks black ---
+  // --- feedback color ---
+  const feedbackColor = (feedback: string) => {
+    if (feedback === "(Book)") return "text-blue-400"; // Book moves in blue
+    if (feedback.includes("Best move")) return "text-green-400";
+    if (feedback.includes("Excellent")) return "text-green-300";
+    if (feedback.includes("Good")) return "text-green-200";
+    if (feedback.includes("Inaccuracy")) return "text-orange-400";
+    if (feedback.includes("Mistake")) return "text-orange-600";
+    if (feedback.includes("Blunder")) return "text-red-400";
+    if (feedback.includes("Missed Mate")) return "text-red-500";
+    return "text-gray-300";
+  };
+
+  // --- AI move ---
+  const maybeAiMove = useCallback(async () => {
+    const chess = chessRef.current;
+    if (
+      !engineRef.current ||
+      !aiSide ||
+      chess.isGameOver() ||
+      chess.turn() !== aiSide
+    )
+      return;
+
+    setIsAiThinking(true);
+
+    // --- Check opening book ---
+    const bookMoves = openingBook[chess.fen()];
+    let move;
+    let feedback = "";
+    if (bookMoves && bookMoves.length > 0) {
+      const bookMove = bookMoves[Math.floor(Math.random() * bookMoves.length)];
+      move = chess.move(bookMove as Move);
+      feedback = "(Book)";
+    } else {
+      const ai = await engineRef.current.getBestAndScore(
+        chess.fen(),
+        Math.max(6, aiLevel)
+      );
+      if (ai.bestFrom && ai.bestTo) {
+        move = chess.move({
+          from: ai.bestFrom,
+          to: ai.bestTo,
+          promotion: ai.bestPromotion,
+        } as Move);
+        if (move) feedback = getMoveFeedback({ cp: 0 }, ai.score, aiSide!);
+      }
+    }
+
+    setIsAiThinking(false);
+
+    if (move) {
+      setMoveHistory((prev) => [...prev, move]);
+      setFen(chess.fen());
+      setTurn(chess.turn());
+      setEngineLastMove({ from: move.from, to: move.to });
+      setEngineLastMoveFeedback(`${move.san} ${feedback}`);
+    }
+
+    if (chess.isGameOver()) setGameOver(true);
+  }, [aiSide, aiLevel]);
+
   useEffect(() => {
     if (playerSide === "b" && aiSide === "w" && engineReady) maybeAiMove();
   }, [playerSide, aiSide, engineReady, maybeAiMove]);
 
-  // --- Player move handler (sync for TS, async internally) ---
+  // --- Player move handler ---
   const classifyAndMaybeAi = (
     from: string,
     to: string,
@@ -164,7 +215,6 @@ export default function App() {
     setTurn(chess.turn());
     setLastMoveLabel(move.san);
 
-    // Async feedback & AI
     void (async () => {
       if (engineRef.current) {
         const analysis = await engineRef.current.getBestAndScore(
@@ -176,7 +226,7 @@ export default function App() {
           analysis.score,
           playerSide!
         );
-        setLastMoveFeedback(feedback);
+        setPlayerLastMoveFeedback(`${move.san} ${feedback}`);
         setEvalScore(
           playerSide === "w"
             ? analysis.score
@@ -186,6 +236,7 @@ export default function App() {
               }
         );
       }
+
       setTimeout(() => maybeAiMove(), 500);
     })();
 
@@ -234,7 +285,8 @@ export default function App() {
     setFen(chessRef.current.fen());
     setMoveHistory([]);
     setLastMoveLabel(null);
-    setLastMoveFeedback(null);
+    setPlayerLastMoveFeedback(null);
+    setEngineLastMoveFeedback(null);
     setGameOver(false);
     setEvalScore(null);
     setHintMove(null);
@@ -245,61 +297,82 @@ export default function App() {
     return <PreGameModal onStart={handleStartGame} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center p-6 transition-all duration-500">
-      <h1 className="text-3xl font-bold mb-6 tracking-[5vmin] uppercase font-serif text-teal-600 animate-pulse">
-        fchees
-      </h1>
-
-      <p className="mt-2 transition-all duration-300">
-        <span className="font-medium">Last Move:</span> {lastMoveLabel ?? "—"}
-      </p>
-      {lastMoveFeedback && (
-        <p className="mt-1 text-yellow-400 font-semibold transition-all duration-300">
-          {lastMoveFeedback}
-        </p>
-      )}
-      {gameOver && (
-        <p className="text-red-400 font-semibold transition-all duration-300">
-          Game Over
-        </p>
-      )}
-
-      <div className="flex justify-center items-center mt-2">
-        <div className="mr-2 transition-all duration-300">
-          <EvalBar score={evalScore} playerSide={playerSide} />
+    <div className="w-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between overflow-hidden">
+      <div className="w-full text-center mt-2">
+        <div className="w-full text-center mt-2 flex flex-col items-center">
+          <div className="flex justify-center gap-4 mt-1 text-sm w-[400px] flex-shrink-0">
+            <span className="text-white font-semibold">
+              You:{" "}
+              <span
+                className={
+                  playerLastMoveFeedback
+                    ? feedbackColor(playerLastMoveFeedback)
+                    : "text-white"
+                }
+              >
+                {playerLastMoveFeedback ?? "—"}
+              </span>
+            </span>
+            <span className="text-white font-semibold">
+              Engine:{" "}
+              <span
+                className={
+                  engineLastMoveFeedback
+                    ? feedbackColor(engineLastMoveFeedback)
+                    : "text-white"
+                }
+              >
+                {engineLastMoveFeedback ?? "—"}
+              </span>
+            </span>
+          </div>
         </div>
-        <div className="w-[73vmin] aspect-square mx-auto transition-all duration-300 scale-100 hover:scale-105">
-          <Board
-            fen={fen}
-            onPlayerMove={classifyAndMaybeAi}
-            playerSide={playerSide}
-            currentTurn={turn}
-            isAiThinking={isAiThinking}
-            hintMove={hintMove}
-            engineMove={engineLastMove}
-          />
+
+        {gameOver && (
+          <p className="text-red-400 font-semibold transition-all duration-300 mt-2">
+            Game Over
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-1 justify-center items-center w-full max-w-screen-xl px-4">
+        <div className="flex flex-col md:flex-row items-center justify-center w-full">
+          <div className="mr-2 md:mr-4 flex-shrink-0 h-[50vmin] md:h-[60vmin]">
+            <EvalBar score={evalScore} playerSide={playerSide} />
+          </div>
+          <div className="w-full max-w-[500px] aspect-square">
+            <Board
+              fen={fen}
+              onPlayerMove={classifyAndMaybeAi}
+              playerSide={playerSide}
+              currentTurn={turn}
+              isAiThinking={isAiThinking}
+              hintMove={hintMove}
+              engineMove={engineLastMove}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-center items-center w-fit mt-3 gap-2 transition-all duration-300">
+      <div className="flex justify-center md:justify-center gap-2 w-full md:w-auto mt-6">
         <button
           onClick={showHint}
-          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 transition-colors duration-200"
+          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 md:flex-none transition-colors duration-200"
           title="Hint"
         >
-          <Pen className="w-5 h-5 mx-auto" />
+          <SearchCheckIcon className="w-5 h-5 mx-auto" />
         </button>
         <button
           onClick={undoMove}
-          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 transition-colors duration-200"
+          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 md:flex-none transition-colors duration-200"
           title="Undo"
         >
-          <Undo className="w-5 h-5 mx-auto" />
+          <RotateCcw className="w-5 h-5 mx-auto" />
         </button>
         {!gameOver ? (
           <button
             onClick={handleResign}
-            className="p-2 bg-red-600 rounded-md hover:bg-red-500 flex-1 transition-colors duration-200"
+            className="p-2 bg-red-600 rounded-md hover:bg-red-500 flex-1 md:flex-none transition-colors duration-200"
             title="Resign"
           >
             <Flag className="w-5 h-5 mx-auto" />
@@ -307,7 +380,7 @@ export default function App() {
         ) : (
           <button
             onClick={() => setShowPreGameModal(true)}
-            className="p-2 bg-green-600 rounded-md hover:bg-green-500 flex-1 w-fit transition-colors duration-200"
+            className="p-2 bg-green-600 rounded-md hover:bg-green-500 flex-1 md:flex-none transition-colors duration-200"
           >
             New Game
           </button>

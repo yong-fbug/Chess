@@ -38,9 +38,9 @@ export default function PreGameModal({ onStart }: Props) {
         >
           {/* Header */}
           <div className="flex items-center justify-center gap-2 mb-6">
-            <span className="text-xl font-bold text-white tracking-wide">
-              ♟️ FCHESS™
-            </span>
+            <h1 className="text-3xl font-bold mb-6 tracking-[5vmin] uppercase font-serif text-teal-600 animate-pulse">
+              fchess
+            </h1>
           </div>
 
           {/* AI Level Selection */}
