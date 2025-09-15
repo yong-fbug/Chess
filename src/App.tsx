@@ -279,43 +279,48 @@ export default function App() {
     <div className="w-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between overflow-hidden">
       {/* Feedback */}
 
-      <div className="flex justify-center gap-4 mt-1 text-sm w-[400px] flex-shrink-0">
-        <span className="text-white font-semibold">
-          You:{" "}
-          <span className={playerLastMoveFeedback?.color ?? "text-white"}>
-            {playerLastMoveFeedback?.label ?? "—"}
+      <div className="flex flex-col items-center w-full max-w-[400px] text-sm space-y-1">
+        {/* First layer: EvalBar */}
+        <div className="w-full">
+          <EvalBar score={evalScore} playerSide={playerSide} />
+        </div>
+
+        {/* Second layer: Feedback */}
+        <div className="flex justify-center gap-2">
+          <span className="text-white font-semibold">
+            You:{" "}
+            <span className={playerLastMoveFeedback?.color ?? "text-white"}>
+              {playerLastMoveFeedback?.label ?? "—"}
+            </span>
           </span>
-        </span>
-        <span className="text-white font-semibold">
-          Engine:{" "}
-          <span className={engineLastMoveFeedback?.color ?? "text-white"}>
-            {engineLastMoveFeedback?.label ?? "—"}
+          <span className="text-white font-semibold">
+            Engine:{" "}
+            <span className={engineLastMoveFeedback?.color ?? "text-white"}>
+              {engineLastMoveFeedback?.label ?? "—"}
+            </span>
           </span>
-        </span>
-      </div>
-      {gameOver && (
-        <p className="text-red-400 font-semibold transition-all duration-300 mt-2">
-          Game Over
-        </p>
-      )}
+        </div>
+
+        {/* Optional: Game Over */}
+        {gameOver && (
+          <p className="text-red-400 font-semibold transition-all duration-300 mt-1 text-center">
+            Game Over
+          </p>
+        )}
+      </div>  
 
       {/* Board + EvalBar */}
       <div className="flex flex-1 justify-center items-center w-full max-w-screen-xl px-4">
-        <div className="flex flex-col md:flex-row items-center justify-center w-full gap-4">
-          <div className="flex-shrink-0 h-[50vmin] md:h-[60vmin]">
-            <EvalBar score={evalScore} playerSide={playerSide} />
-          </div>
-          <div className="w-full max-w-[500px] aspect-square">
-            <Board
-              fen={fen}
-              onPlayerMove={classifyAndMaybeAi}
-              playerSide={playerSide}
-              currentTurn={turn}
-              isAiThinking={isAiThinking}
-              hintMove={hintMove}
-              engineMove={engineLastMove}
-            />
-          </div>
+        <div className="w-full max-w-[500px] aspect-square">
+          <Board
+            fen={fen}
+            onPlayerMove={classifyAndMaybeAi}
+            playerSide={playerSide}
+            currentTurn={turn}
+            isAiThinking={isAiThinking}
+            hintMove={hintMove}
+            engineMove={engineLastMove}
+          />
         </div>
       </div>
 

@@ -36,34 +36,18 @@ export default function EvalBar({ score, playerSide }: Props) {
   }, [score, playerSide]);
 
   return (
-    <div className="flex flex-col items-center mb-2 h-full">
-      <div className="relative h-full w-5 bg-gray-800 rounded-md overflow-hidden shadow-md">
-        {playerSide === "w" ? (
-          <>
-            {/* White at bottom */}
-            <div
-              className="absolute bottom-0 left-0 w-full bg-white transition-all duration-500 ease-in-out"
-              style={{ height: `${percent}%` }}
-            />
-            <div
-              className="absolute top-0 left-0 w-full bg-black transition-all duration-500 ease-in-out"
-              style={{ height: `${100 - percent}%` }}
-            />
-          </>
-        ) : (
-          <>
-            {/* Black at bottom */}
-            <div
-              className="absolute bottom-0 left-0 w-full bg-black transition-all duration-500 ease-in-out"
-              style={{ height: `${100 - percent}%` }}
-            />
-            <div
-              className="absolute top-0 left-0 w-full bg-white transition-all duration-500 ease-in-out"
-              style={{ height: `${percent}%` }}
-            />
-          </>
-        )}
+    <div className="flex flex-col items-center mb-2 w-full">
+      <div className="relative w-full h-5 bg-gray-800 overflow-hidden shadow-md border-2 border-gray-700">
+        <div
+          className="absolute left-0 top-0 h-full bg-white transition-all duration-500 ease-in-out"
+          style={{ width: `${percent}%` }}
+        />
+        <div
+          className="absolute right-0 top-0 h-full bg-black transition-all duration-500 ease-in-out"
+          style={{ width: `${100 - percent}%` }}
+        />
       </div>
+
       <div className="text-xs font-mono text-gray-200 mt-1">
         {score?.mate !== undefined
           ? `M${score.mate > 0 ? "+" + score.mate : score.mate}`
