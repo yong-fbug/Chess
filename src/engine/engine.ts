@@ -1,3 +1,4 @@
+// engine.ts
 export type EvalScore = { cp?: number; mate?: number };
 
 export class EngineWrapper {
@@ -10,6 +11,7 @@ export class EngineWrapper {
     this.worker.addEventListener("message", this.onMessage.bind(this));
   }
 
+  // Initialize Stockfish
   async init() {
     return new Promise<void>((resolve) => {
       const listener = (e: MessageEvent) => {
@@ -24,14 +26,17 @@ export class EngineWrapper {
     });
   }
 
+  // Terminate worker safely
   terminate() {
     this.worker.terminate();
   }
 
+  // Send command to Stockfish
   post(cmd: string) {
     this.worker.postMessage(cmd);
   }
 
+  // Handle incoming messages from Stockfish
   private onMessage(e: MessageEvent) {
     const text = e.data as string;
     if (text.startsWith("info")) this.lastInfo = text;
@@ -41,6 +46,7 @@ export class EngineWrapper {
     }
   }
 
+  // Request best move & evaluation
   async getBestAndScore(fen: string, depth = 12) {
     this.post(`position fen ${fen}`);
     this.post(`go depth ${depth}`);
@@ -64,6 +70,7 @@ export class EngineWrapper {
     };
   }
 
+  // Parse the last info line for evaluation
   private parseLastInfo(infoLine: string | null): EvalScore {
     if (!infoLine) return { cp: 0 };
     const mCp = infoLine.match(/score cp (-?\d+)/);
@@ -74,9 +81,20 @@ export class EngineWrapper {
   }
 }
 
+// Singleton pattern to avoid multiple workers
+let engineInstance: EngineWrapper | null = null;
+
 export async function createStockfishWorker(): Promise<EngineWrapper> {
+  if (engineInstance) return engineInstance;
+
   const worker = new Worker("/stockfish.js");
-  const wrapper = new EngineWrapper(worker);
-  await wrapper.init();
-  return wrapper;
+  engineInstance = new EngineWrapper(worker);
+  await engineInstance.init();
+
+  // Auto-terminate on window unload
+  window.addEventListener("beforeunload", () => {
+    engineInstance?.terminate();
+  });
+
+  return engineInstance;
 }
