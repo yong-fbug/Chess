@@ -4,7 +4,11 @@ import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
 import PreGameModal from "./components/PreGameModal";
 import EvalBar from "./components/EvalBar";
-import { EngineWrapper, EvalScore, getEngine } from "./engine/engine";
+import {
+  createStockfishWorker,
+  EngineWrapper,
+  EvalScore,
+} from "./engine/engine";
 
 // --- Simple opening book ---
 const openingBook: Record<
@@ -59,7 +63,7 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const wrapper = await getEngine();
+      const wrapper = await createStockfishWorker();
       if (!mounted) return;
       engineRef.current = wrapper;
       setEngineReady(true);

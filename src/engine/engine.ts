@@ -110,15 +110,9 @@ export class EngineWrapper {
 }
 
 // Singleton pattern to avoid multiple workers
-
-let engineInstance: EngineWrapper | null = null;
-
-export async function getEngine(): Promise<EngineWrapper> {
-  if (engineInstance) return engineInstance;
-
+export async function createStockfishWorker(): Promise<EngineWrapper> {
   const worker = new Worker("/stockfish.js");
-  engineInstance = new EngineWrapper(worker);
-  await engineInstance.init();
-
-  return engineInstance;
+  const wrapper = new EngineWrapper(worker);
+  await wrapper.init();
+  return wrapper;
 }
