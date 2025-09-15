@@ -45,12 +45,12 @@ export default function PreGameModal({ onStart }: Props) {
 
           {/* AI Level Selection */}
           <h2 className="text-lg font-semibold text-gray-200 mb-2">
-            Choose AI Level
+            Choose Engine Level
           </h2>
           <select
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(Number(e.target.value))}
-            className="w-full bg-[#222536] text-gray-200 p-3 rounded-lg border border-[#2e3247] focus:ring-2 focus:ring-purple-500 outline-none mb-6"
+            className="w-full bg-[#222536] text-gray-200 p-3 rounded-lg border border-[#2e3247] focus:ring-2 focus:ring-teal-500 outline-none mb-6"
           >
             {LEVELS.map((lvl) => (
               <option
@@ -63,22 +63,18 @@ export default function PreGameModal({ onStart }: Props) {
             ))}
           </select>
 
-          {/* Side Selection */}
-          <h2 className="text-lg font-semibold text-gray-200 mb-2">
-            Choose Your Side
-          </h2>
           <div className="flex gap-4">
             <button
               onClick={() => onStart("w", selectedLevel)}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-xl font-semibold shadow-md hover:opacity-90 transition"
+              className="flex-1 bg-teal-600 text-gray-200 py-3 rounded-xl font-semibold shadow-md hover:opacity-90 transition"
             >
-              Play as White
+              White
             </button>
             <button
               onClick={() => onStart("b", selectedLevel)}
-              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 rounded-xl font-semibold shadow-md hover:opacity-90 transition"
+              className="flex-1 bg-teal-600 text-gray-900 py-3 rounded-xl font-semibold shadow-md hover:opacity-90 transition"
             >
-              Play as Black
+              Black
             </button>
           </div>
         </motion.div>
