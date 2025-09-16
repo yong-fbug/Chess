@@ -57,7 +57,7 @@ export default function App() {
 
   // --- Initialize Stockfish only once ---
   useEffect(() => {
-    if (engineInitialized.current) return; // ✅ Prevent double init in Strict Mode
+    if (engineInitialized.current) return; //
     engineInitialized.current = true;
 
     (async () => {
