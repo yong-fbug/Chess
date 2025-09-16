@@ -118,7 +118,7 @@ export async function getEngine(): Promise<EngineWrapper> {
   if (engineInitPromise) return engineInitPromise;
 
   engineInitPromise = (async () => {
-    const worker = new Worker(new URL("/stockfish.js", import.meta.url)); // safer for Vite/Vercel
+    const worker = new Worker(new URL("/stockfish.js"));
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
     engineInstance = wrapper;
