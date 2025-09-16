@@ -12,8 +12,8 @@
  * Based on Stockfish (c) T. Romstad, M. Costalba, J. Kiiski, G. Linscott and other contributors.
  * https://github.com/official-stockfish/Stockfish
  */
-console.log("Worker started");
-self.postMessage("Worker ready");
+// console.log("Worker started");
+// self.postMessage("Worker ready");
 
 var Stockfish;
 function INIT_ENGINE() {

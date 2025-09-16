@@ -121,13 +121,13 @@ export async function getEngine(): Promise<EngineWrapper> {
   if (globalThis.__stockfishEngine) return globalThis.__stockfishEngine;
   if (engineInitPromise) return engineInitPromise;
 
+  // Assign promise immediately to prevent parallel creation
   engineInitPromise = (async () => {
     console.log("Creating Stockfish worker...");
     const worker = new Worker("/stockfish.js");
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
-    globalThis.__stockfishEngine = wrapper; // persist across reloads
-    engineInitPromise = null;
+    globalThis.__stockfishEngine = wrapper;
     console.log("Stockfish ready ✅");
     return wrapper;
   })();
