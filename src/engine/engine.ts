@@ -109,6 +109,7 @@ export class EngineWrapper {
 }
 
 // --- Singleton Engine with pending promise ---
+
 let engineInstance: EngineWrapper | null = null;
 let engineInitPromise: Promise<EngineWrapper> | null = null;
 
@@ -117,7 +118,7 @@ export async function getEngine(): Promise<EngineWrapper> {
   if (engineInitPromise) return engineInitPromise;
 
   engineInitPromise = (async () => {
-    const worker = new Worker("/stockfish.js");
+    const worker = new Worker(new URL("/stockfish.js", import.meta.url)); // safer for Vite/Vercel
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
     engineInstance = wrapper;

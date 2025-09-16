@@ -33,7 +33,6 @@ export default function App() {
   const [aiSide, setAiSide] = useState<"w" | "b" | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [_, setLastMoveLabel] = useState<string | null>(null);
   const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<{
     label: string;
     color: string;
@@ -57,41 +56,21 @@ export default function App() {
 
   // --- Initialize Stockfish ---
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const wrapper = await getEngine();
-      if (!mounted) return;
+  let cancelled = false;
+  (async () => {
+    const wrapper = await getEngine();
+    if (!cancelled) {
       engineRef.current = wrapper;
       setEngineReady(true);
-    })();
-    return () => {
-      mounted = false;
-      // engineRef.current?.terminate();
-    };
-  }, []);
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
-  // --- Update evaluation ---
-  const updateEval = useCallback(async () => {
-    if (!engineRef.current || !playerSide) return;
-    const analysis = await engineRef.current.getBestAndScore(
-      chessRef.current.fen(),
-      Math.max(6, aiLevel)
-    );
-    const score =
-      playerSide === "w"
-        ? analysis.score
-        : {
-            cp:
-              analysis.score.cp !== undefined ? -analysis.score.cp : undefined,
-            mate:
-              analysis.score.mate !== undefined
-                ? -analysis.score.mate
-                : undefined,
-          };
-    setEvalScore(score);
-  }, [playerSide, aiLevel]);
 
-  // --- Feedback logic ---
+  // --- Smarter feedback---
   const getMoveFeedback = (
     playedScore: EvalScore,
     bestScore: EvalScore,
@@ -102,6 +81,7 @@ export default function App() {
     let matePlayed = playedScore.mate;
     let mateBest = bestScore.mate;
 
+    // normalize to player's perspective
     if (side === "b") {
       cpPlayed = -cpPlayed;
       cpBest = -cpBest;
@@ -109,22 +89,41 @@ export default function App() {
       mateBest = mateBest !== undefined ? -mateBest : undefined;
     }
 
-    if (matePlayed !== undefined) {
-      if (mateBest !== undefined && matePlayed !== mateBest)
+    // --- Mate handling ---
+    if (mateBest !== undefined) {
+      if (matePlayed === undefined) {
         return {
-          label: `Missed Mate in ${mateBest}`,
+          label: `Missed Mate in ${Math.abs(mateBest)}`,
           color: "text-orange-500",
         };
-      return { label: `Mate in ${matePlayed}`, color: "text-red-500" };
+      }
+      if (matePlayed !== mateBest) {
+        return {
+          label: `Worse Mate (Mate in ${Math.abs(matePlayed)})`,
+          color: "text-orange-500",
+        };
+      }
+      return { label: "Best Move", color: "text-cyan-400" };
     }
 
-    const delta = cpBest - cpPlayed;
-    if (delta <= 10) return { label: "Best move", color: "text-cyan-400" };
-    if (delta <= 30) return { label: "Excellent", color: "text-green-400" };
-    if (delta <= 50) return { label: "Good", color: "text-lime-400" };
-    if (delta <= 100) return { label: "Inaccuracy", color: "text-yellow-400" };
-    if (delta <= 300) return { label: "Mistake", color: "text-orange-400" };
-    return { label: "Blunder", color: "text-red-400" };
+    // --- Missed Win ---
+    if (cpBest >= 200 && cpPlayed < 50) {
+      return { label: "Missed Win", color: "text-orange-500" };
+    }
+
+    // --- Normal eval difference ---
+    const diff = cpBest - cpPlayed;
+
+    if (diff >= 300) return { label: "Blunder", color: "text-red-500" };
+    if (diff >= 150) return { label: "Mistake", color: "text-orange-500" };
+    if (diff >= 70) return { label: "Inaccuracy", color: "text-yellow-500" };
+
+    // --- Good moves / improvements ---
+    if (diff <= 10) return { label: "Best Move", color: "text-cyan-400" };
+    if (diff <= 30) return { label: "Excellent", color: "text-green-400" };
+    if (diff <= 60) return { label: "Good", color: "text-lime-400" };
+
+    return { label: "OK", color: "text-gray-400" };
   };
 
   // --- AI move ---
@@ -142,6 +141,7 @@ export default function App() {
     const bookMoves = openingBook[chess.fen()];
     let move;
     let feedback: { label: string; color: string } = { label: "", color: "" };
+
     if (bookMoves && bookMoves.length > 0) {
       const bookMove = bookMoves[Math.floor(Math.random() * bookMoves.length)];
       move = chess.move(bookMove as Move);
@@ -157,7 +157,7 @@ export default function App() {
           to: ai.bestTo,
           promotion: ai.bestPromotion,
         } as Move);
-        if (move) feedback = getMoveFeedback({ cp: 0 }, ai.score, aiSide!);
+        if (move) feedback = getMoveFeedback(ai.score, ai.score, aiSide!);
       }
     }
 
@@ -179,48 +179,83 @@ export default function App() {
   }, [playerSide, aiSide, engineReady, maybeAiMove]);
 
   // --- Player move handler ---
-  const classifyAndMaybeAi = (
-    from: string,
-    to: string,
-    promotion: string = "q"
-  ): boolean => {
+  const classifyAndMaybeAi = (from: string, to: string, promotion = "q") => {
     const chess = chessRef.current;
     if (chess.turn() !== playerSide) return false;
 
-    const move = chess.move({ from, to, promotion } as Move);
-    if (!move) return false;
+    (async () => {
+      if (!engineRef.current) return;
 
-    setMoveHistory((prev) => [...prev, move]);
-    setFen(chess.fen());
-    setTurn(chess.turn());
-    setLastMoveLabel(move.san);
+      const beforeAnalysis = await engineRef.current.getBestAndScore(
+        chess.fen(),
+        Math.max(6, aiLevel)
+      );
 
-    void (async () => {
-      if (engineRef.current) {
-        const analysis = await engineRef.current.getBestAndScore(
+      const isBestMove =
+        beforeAnalysis.bestFrom === from &&
+        beforeAnalysis.bestTo === to &&
+        (beforeAnalysis.bestPromotion ?? "q") === promotion;
+
+      const move = chess.move({ from, to, promotion } as Move);
+      if (!move) return false;
+
+      setMoveHistory((prev) => [...prev, move]);
+      setFen(chess.fen());
+      setTurn(chess.turn());
+
+      if (isBestMove) {
+        // ✅ Force Best Move
+        setPlayerLastMoveFeedback({
+          label: "Best Move",
+          color: "text-cyan-400",
+        });
+
+        // ✅ Still update eval bar with afterAnalysis
+        const afterAnalysis = await engineRef.current.getBestAndScore(
           chess.fen(),
           Math.max(6, aiLevel)
         );
+        setEvalScore(
+          playerSide === "w"
+            ? afterAnalysis.score
+            : {
+                cp: -afterAnalysis.score.cp!,
+                mate: afterAnalysis.score.mate
+                  ? -afterAnalysis.score.mate
+                  : undefined,
+              }
+        );
+      } else {
+        // Normal feedback path
+        const afterAnalysis = await engineRef.current.getBestAndScore(
+          chess.fen(),
+          Math.max(6, aiLevel)
+        );
+
         const feedback = getMoveFeedback(
-          { cp: 0 },
-          analysis.score,
+          afterAnalysis.score,
+          beforeAnalysis.score,
           playerSide!
         );
         setPlayerLastMoveFeedback(feedback);
+
         setEvalScore(
           playerSide === "w"
-            ? analysis.score
+            ? afterAnalysis.score
             : {
-                cp: -analysis.score.cp!,
-                mate: analysis.score.mate ? -analysis.score.mate : undefined,
+                cp: -afterAnalysis.score.cp!,
+                mate: afterAnalysis.score.mate
+                  ? -afterAnalysis.score.mate
+                  : undefined,
               }
         );
       }
+
       setTimeout(() => maybeAiMove(), 500);
     })();
 
     return true;
-  };
+  };  
 
   const showHint = async () => {
     if (!engineRef.current || !playerSide) return;
@@ -244,13 +279,9 @@ export default function App() {
     setMoveHistory((prev) => prev.slice(0, -2));
     setFen(chess.fen());
     setTurn(chess.turn());
-    setLastMoveLabel(
-      moveHistory.length >= 2 ? moveHistory[moveHistory.length - 2].san : null
-    );
     setPlayerLastMoveFeedback(null);
     setEngineLastMoveFeedback(null);
     setGameOver(false);
-    await updateEval();
   };
 
   const handleResign = () => setGameOver(true);
@@ -263,7 +294,6 @@ export default function App() {
     setTurn(chessRef.current.turn());
     setFen(chessRef.current.fen());
     setMoveHistory([]);
-    setLastMoveLabel(null);
     setPlayerLastMoveFeedback(null);
     setEngineLastMoveFeedback(null);
     setGameOver(false);
@@ -276,16 +306,27 @@ export default function App() {
     return <PreGameModal onStart={handleStartGame} />;
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between overflow-hidden">
+    <div className="w-full h-auto bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between">
       {/* Feedback */}
-
       <div className="flex flex-col items-center w-full max-w-[400px] text-sm space-y-1">
-        {/* First layer: EvalBar */}
         <div className="w-full">
           <EvalBar score={evalScore} playerSide={playerSide} />
         </div>
-
-        {/* Second layer: Feedback */}
+        <div className="w-full max-w-[400px] overflow-x-auto">
+          <div className="flex space-x-2 text-sm whitespace-nowrap px-1">
+            {moveHistory.map((m, i) => (
+              <span
+                key={i}
+                className={`px-1 rounded ${
+                  i % 2 === 0 ? "text-blue-400" : "text-yellow-400"
+                }`}
+              >
+                {Math.floor(i / 2) + 1}
+                {i % 2 === 0 ? "." : "..."} {m.san}
+              </span>
+            ))}
+          </div>
+        </div>
         <div className="flex justify-center gap-2">
           <span className="text-white font-semibold">
             You:{" "}
@@ -300,16 +341,14 @@ export default function App() {
             </span>
           </span>
         </div>
-
-        {/* Optional: Game Over */}
         {gameOver && (
-          <p className="text-red-400 font-semibold transition-all duration-300 mt-1 text-center">
+          <p className="text-red-400 font-semibold mt-1 text-center">
             Game Over
           </p>
         )}
-      </div>  
+      </div>
 
-      {/* Board + EvalBar */}
+      {/* Board */}
       <div className="flex flex-1 justify-center items-center w-full max-w-screen-xl px-4">
         <div className="w-full max-w-[500px] aspect-square">
           <Board
@@ -325,17 +364,17 @@ export default function App() {
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center md:justify-center gap-2 w-full md:w-auto mt-6">
+      <div className="flex justify-center gap-2 w-full md:w-auto mt-6">
         <button
           onClick={showHint}
-          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 md:flex-none transition-colors duration-200"
+          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600"
           title="Hint"
         >
           <SearchCheckIcon className="w-5 h-5 mx-auto" />
         </button>
         <button
           onClick={undoMove}
-          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 flex-1 md:flex-none transition-colors duration-200"
+          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600"
           title="Undo"
         >
           <RotateCcw className="w-5 h-5 mx-auto" />
@@ -343,7 +382,7 @@ export default function App() {
         {!gameOver ? (
           <button
             onClick={handleResign}
-            className="p-2 bg-red-600 rounded-md hover:bg-red-500 flex-1 md:flex-none transition-colors duration-200"
+            className="p-2 bg-red-600 rounded-md hover:bg-red-500"
             title="Resign"
           >
             <Flag className="w-5 h-5 mx-auto" />
@@ -351,7 +390,7 @@ export default function App() {
         ) : (
           <button
             onClick={() => setShowPreGameModal(true)}
-            className="p-2 bg-green-600 rounded-md hover:bg-green-500 flex-1 md:flex-none transition-colors duration-200"
+            className="p-2 bg-green-600 rounded-md hover:bg-green-500"
           >
             New Game
           </button>
