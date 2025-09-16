@@ -106,29 +106,45 @@ export class EngineWrapper {
     if (mMate) return { mate: parseInt(mMate[1], 10) };
     return { cp: 0 };
   }
+
+  // --- Properly reset engine for new game ---
+  async newGame() {
+    return this.runInQueue(async () => {
+      // Clear internal info
+      this.lastInfo = null;
+      this.pendingResolve = null;
+
+      // Send ucinewgame and wait for ready
+      this.post("ucinewgame");
+      this.post("isready");
+
+      await new Promise<void>((resolve) => {
+        const listener = (e: MessageEvent) => {
+          if (e.data === "readyok") {
+            this.worker.removeEventListener("message", listener);
+            resolve();
+          }
+        };
+        this.worker.addEventListener("message", listener);
+      });
+    });
+  }
 }
 
-// --- Singleton Engine with global persistence (safe in HMR) ---
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __stockfishEngine: EngineWrapper | undefined;
-}
-
+// --- Singleton Engine ---
+let engineInstance: EngineWrapper | null = null;
 let engineInitPromise: Promise<EngineWrapper> | null = null;
 
 export async function getEngine(): Promise<EngineWrapper> {
-  if (globalThis.__stockfishEngine) return globalThis.__stockfishEngine;
+  if (engineInstance) return engineInstance;
   if (engineInitPromise) return engineInitPromise;
 
-  // Assign promise immediately to prevent parallel creation
   engineInitPromise = (async () => {
-    console.log("Creating Stockfish worker...");
     const worker = new Worker("/stockfish.js");
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
-    globalThis.__stockfishEngine = wrapper;
-    console.log("Stockfish ready ✅");
+    engineInstance = wrapper;
+    engineInitPromise = null;
     return wrapper;
   })();
 

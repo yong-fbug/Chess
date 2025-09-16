@@ -26,7 +26,7 @@ const openingBook: Record<
 export default function App() {
   const chessRef = useRef(new Chess());
   const engineRef = useRef<EngineWrapper | null>(null);
-  const engineInitialized = useRef(false); // ✅ Ref prevents double initialization
+  const engineInitialized = useRef(false);
 
   const [fen, setFen] = useState(chessRef.current.fen());
   const [turn, setTurn] = useState<"w" | "b">(chessRef.current.turn());
@@ -55,9 +55,9 @@ export default function App() {
   } | null>(null);
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
-  // --- Initialize Stockfish only once ---
+  // --- Initialize Stockfish once ---
   useEffect(() => {
-    if (engineInitialized.current) return; //
+    if (engineInitialized.current) return;
     engineInitialized.current = true;
 
     (async () => {
@@ -67,7 +67,7 @@ export default function App() {
     })();
   }, []);
 
-  // --- Smarter feedback ---
+  // --- Feedback calculation ---
   const getMoveFeedback = (
     playedScore: EvalScore,
     bestScore: EvalScore,
@@ -101,20 +101,17 @@ export default function App() {
 
     if (cpBest >= 200 && cpPlayed < 50)
       return { label: "Missed Win", color: "text-orange-500" };
-
     const diff = cpBest - cpPlayed;
     if (diff >= 300) return { label: "Blunder", color: "text-red-500" };
     if (diff >= 150) return { label: "Mistake", color: "text-orange-500" };
     if (diff >= 70) return { label: "Inaccuracy", color: "text-yellow-500" };
-
     if (diff <= 10) return { label: "Best Move", color: "text-cyan-400" };
     if (diff <= 30) return { label: "Excellent", color: "text-green-400" };
     if (diff <= 60) return { label: "Good", color: "text-lime-400" };
-
     return { label: "OK", color: "text-gray-400" };
   };
 
-  // --- AI move ---
+  // --- AI move with async yielding ---
   const maybeAiMove = useCallback(async () => {
     const chess = chessRef.current;
     if (
@@ -126,8 +123,10 @@ export default function App() {
       return;
     setIsAiThinking(true);
 
+    await new Promise((r) => setTimeout(r, 0)); // yield to browser
+
     const bookMoves = openingBook[chess.fen()];
-    let move;
+    let move: Move | null = null;
     let feedback: { label: string; color: string } = { label: "", color: "" };
 
     if (bookMoves && bookMoves.length > 0) {
@@ -166,7 +165,7 @@ export default function App() {
     if (playerSide === "b" && aiSide === "w" && engineReady) maybeAiMove();
   }, [playerSide, aiSide, engineReady, maybeAiMove]);
 
-  // --- Player move handler ---
+  // --- Player move ---
   const classifyAndMaybeAi = (from: string, to: string, promotion = "q") => {
     const chess = chessRef.current;
     if (chess.turn() !== playerSide) return false;
@@ -174,18 +173,19 @@ export default function App() {
     (async () => {
       if (!engineRef.current) return;
 
+      await new Promise((r) => setTimeout(r, 0)); // yield
+
       const beforeAnalysis = await engineRef.current.getBestAndScore(
         chess.fen(),
         Math.max(6, aiLevel)
       );
-
       const isBestMove =
         beforeAnalysis.bestFrom === from &&
         beforeAnalysis.bestTo === to &&
         (beforeAnalysis.bestPromotion ?? "q") === promotion;
 
       const move = chess.move({ from, to, promotion } as Move);
-      if (!move) return false;
+      if (!move) return;
 
       setMoveHistory((prev) => [...prev, move]);
       setFen(chess.fen());
@@ -195,20 +195,19 @@ export default function App() {
         chess.fen(),
         Math.max(6, aiLevel)
       );
-
-      if (isBestMove) {
+      if (isBestMove)
         setPlayerLastMoveFeedback({
           label: "Best Move",
           color: "text-cyan-400",
         });
-      } else {
-        const feedback = getMoveFeedback(
-          afterAnalysis.score,
-          beforeAnalysis.score,
-          playerSide!
+      else
+        setPlayerLastMoveFeedback(
+          getMoveFeedback(
+            afterAnalysis.score,
+            beforeAnalysis.score,
+            playerSide!
+          )
         );
-        setPlayerLastMoveFeedback(feedback);
-      }
 
       setEvalScore(
         playerSide === "w"
@@ -221,7 +220,7 @@ export default function App() {
             }
       );
 
-      setTimeout(() => maybeAiMove(), 500);
+      setTimeout(() => maybeAiMove(), 50); // small delay
     })();
 
     return true;
@@ -243,7 +242,7 @@ export default function App() {
 
   const undoMove = async () => {
     const chess = chessRef.current;
-    if (moveHistory.length === 0 || gameOver) return;
+    if (moveHistory.length === 0) return;
     chess.undo();
     if (chess.turn() === aiSide && moveHistory.length >= 2) chess.undo();
     setMoveHistory((prev) => prev.slice(0, -2));
@@ -273,10 +272,14 @@ export default function App() {
 
     if (engineRef.current) {
       engineRef.current.post("ucinewgame");
+
+      if (side === "b") maybeAiMove();
     } else {
       const wrapper = await getEngine();
       engineRef.current = wrapper;
       setEngineReady(true);
+
+      if (side === "b") maybeAiMove();
     }
   };
 
