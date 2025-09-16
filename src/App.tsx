@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Chess, Move } from "chess.js";
 import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
@@ -26,6 +26,7 @@ const openingBook: Record<
 export default function App() {
   const chessRef = useRef(new Chess());
   const engineRef = useRef<EngineWrapper | null>(null);
+  const engineInitialized = useRef(false); // ✅ Ref prevents double initialization
 
   const [fen, setFen] = useState(chessRef.current.fen());
   const [turn, setTurn] = useState<"w" | "b">(chessRef.current.turn());
@@ -54,24 +55,19 @@ export default function App() {
   } | null>(null);
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
-  // --- Initialize Stockfish ---
+  // --- Initialize Stockfish only once ---
   useEffect(() => {
-    let cancelled = false;
+    if (engineInitialized.current) return; // ✅ Prevent double init in Strict Mode
+    engineInitialized.current = true;
+
     (async () => {
       const wrapper = await getEngine();
-      if (!cancelled) {
-        engineRef.current = wrapper;
-        setEngineReady(true);
-      }
+      engineRef.current = wrapper;
+      setEngineReady(true);
     })();
-    return () => {
-      cancelled = true;
-      engineRef.current?.terminate();
-      globalThis.__stockfishEngine = undefined; // allow fresh worker next time
-    };
   }, []);
 
-  // --- Smarter feedback---
+  // --- Smarter feedback ---
   const getMoveFeedback = (
     playedScore: EvalScore,
     bestScore: EvalScore,
@@ -82,7 +78,6 @@ export default function App() {
     let matePlayed = playedScore.mate;
     let mateBest = bestScore.mate;
 
-    // normalize to player's perspective
     if (side === "b") {
       cpPlayed = -cpPlayed;
       cpBest = -cpBest;
@@ -90,36 +85,28 @@ export default function App() {
       mateBest = mateBest !== undefined ? -mateBest : undefined;
     }
 
-    // --- Mate handling ---
     if (mateBest !== undefined) {
-      if (matePlayed === undefined) {
+      if (matePlayed === undefined)
         return {
           label: `Missed Mate in ${Math.abs(mateBest)}`,
           color: "text-orange-500",
         };
-      }
-      if (matePlayed !== mateBest) {
+      if (matePlayed !== mateBest)
         return {
           label: `Worse Mate (Mate in ${Math.abs(matePlayed)})`,
           color: "text-orange-500",
         };
-      }
       return { label: "Best Move", color: "text-cyan-400" };
     }
 
-    // --- Missed Win ---
-    if (cpBest >= 200 && cpPlayed < 50) {
+    if (cpBest >= 200 && cpPlayed < 50)
       return { label: "Missed Win", color: "text-orange-500" };
-    }
 
-    // --- Normal eval difference ---
     const diff = cpBest - cpPlayed;
-
     if (diff >= 300) return { label: "Blunder", color: "text-red-500" };
     if (diff >= 150) return { label: "Mistake", color: "text-orange-500" };
     if (diff >= 70) return { label: "Inaccuracy", color: "text-yellow-500" };
 
-    // --- Good moves / improvements ---
     if (diff <= 10) return { label: "Best Move", color: "text-cyan-400" };
     if (diff <= 30) return { label: "Excellent", color: "text-green-400" };
     if (diff <= 60) return { label: "Good", color: "text-lime-400" };
@@ -204,53 +191,35 @@ export default function App() {
       setFen(chess.fen());
       setTurn(chess.turn());
 
+      const afterAnalysis = await engineRef.current.getBestAndScore(
+        chess.fen(),
+        Math.max(6, aiLevel)
+      );
+
       if (isBestMove) {
-        // ✅ Force Best Move
         setPlayerLastMoveFeedback({
           label: "Best Move",
           color: "text-cyan-400",
         });
-
-        // ✅ Still update eval bar with afterAnalysis
-        const afterAnalysis = await engineRef.current.getBestAndScore(
-          chess.fen(),
-          Math.max(6, aiLevel)
-        );
-        setEvalScore(
-          playerSide === "w"
-            ? afterAnalysis.score
-            : {
-                cp: -afterAnalysis.score.cp!,
-                mate: afterAnalysis.score.mate
-                  ? -afterAnalysis.score.mate
-                  : undefined,
-              }
-        );
       } else {
-        // Normal feedback path
-        const afterAnalysis = await engineRef.current.getBestAndScore(
-          chess.fen(),
-          Math.max(6, aiLevel)
-        );
-
         const feedback = getMoveFeedback(
           afterAnalysis.score,
           beforeAnalysis.score,
           playerSide!
         );
         setPlayerLastMoveFeedback(feedback);
-
-        setEvalScore(
-          playerSide === "w"
-            ? afterAnalysis.score
-            : {
-                cp: -afterAnalysis.score.cp!,
-                mate: afterAnalysis.score.mate
-                  ? -afterAnalysis.score.mate
-                  : undefined,
-              }
-        );
       }
+
+      setEvalScore(
+        playerSide === "w"
+          ? afterAnalysis.score
+          : {
+              cp: -afterAnalysis.score.cp!,
+              mate: afterAnalysis.score.mate
+                ? -afterAnalysis.score.mate
+                : undefined,
+            }
+      );
 
       setTimeout(() => maybeAiMove(), 500);
     })();
