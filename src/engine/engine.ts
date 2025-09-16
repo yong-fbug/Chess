@@ -108,21 +108,27 @@ export class EngineWrapper {
   }
 }
 
-// --- Singleton Engine with pending promise ---
+// --- Singleton Engine with global persistence (safe in HMR) ---
 
-let engineInstance: EngineWrapper | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __stockfishEngine: EngineWrapper | undefined;
+}
+
 let engineInitPromise: Promise<EngineWrapper> | null = null;
 
 export async function getEngine(): Promise<EngineWrapper> {
-  if (engineInstance) return engineInstance;
+  if (globalThis.__stockfishEngine) return globalThis.__stockfishEngine;
   if (engineInitPromise) return engineInitPromise;
 
   engineInitPromise = (async () => {
+    console.log("Creating Stockfish worker...");
     const worker = new Worker("/stockfish.js");
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
-    engineInstance = wrapper;
+    globalThis.__stockfishEngine = wrapper; // persist across reloads
     engineInitPromise = null;
+    console.log("Stockfish ready ✅");
     return wrapper;
   })();
 

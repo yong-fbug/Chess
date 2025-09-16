@@ -56,19 +56,21 @@ export default function App() {
 
   // --- Initialize Stockfish ---
   useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    const wrapper = await getEngine();
-    if (!cancelled) {
-      engineRef.current = wrapper;
-      setEngineReady(true);
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
+    let cancelled = false;
+    (async () => {
+      const wrapper = await getEngine();
+      if (!cancelled) {
+        engineRef.current = wrapper;
+        setEngineReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      // optional: if you really want to kill worker when component unmounts
+      // engineRef.current?.terminate();
+      // globalThis.__stockfishEngine = undefined;
+    };
+  }, []);
 
   // --- Smarter feedback---
   const getMoveFeedback = (
@@ -255,7 +257,7 @@ export default function App() {
     })();
 
     return true;
-  };  
+  };
 
   const showHint = async () => {
     if (!engineRef.current || !playerSide) return;
