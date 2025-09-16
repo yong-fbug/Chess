@@ -256,7 +256,7 @@ export default function App() {
 
   const handleResign = () => setGameOver(true);
 
-  const handleStartGame = (side: "w" | "b", level: number) => {
+  const handleStartGame = async (side: "w" | "b", level: number) => {
     chessRef.current.reset();
     setAiLevel(level);
     setPlayerSide(side);
@@ -270,6 +270,14 @@ export default function App() {
     setEvalScore(null);
     setHintMove(null);
     setShowPreGameModal(false);
+
+    if (engineRef.current) {
+      engineRef.current.post("ucinewgame");
+    } else {
+      const wrapper = await getEngine();
+      engineRef.current = wrapper;
+      setEngineReady(true);
+    }
   };
 
   if (!playerSide || !aiSide || showPreGameModal)
