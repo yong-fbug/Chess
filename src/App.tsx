@@ -66,9 +66,8 @@ export default function App() {
     })();
     return () => {
       cancelled = true;
-      // optional: if you really want to kill worker when component unmounts
-      // engineRef.current?.terminate();
-      // globalThis.__stockfishEngine = undefined;
+      engineRef.current?.terminate();
+      globalThis.__stockfishEngine = undefined; // allow fresh worker next time
     };
   }, []);
 
