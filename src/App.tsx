@@ -26,7 +26,7 @@ const openingBook: Record<
 export default function App() {
   const chessRef = useRef(new Chess());
   const engineRef = useRef<EngineWrapper | null>(null);
-  const engineInitialized = useRef(false);
+  // const engineInitialized = useRef(false);
 
   const [fen, setFen] = useState(chessRef.current.fen());
   const [turn, setTurn] = useState<"w" | "b">(chessRef.current.turn());
