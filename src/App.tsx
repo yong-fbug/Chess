@@ -56,16 +56,24 @@ export default function App() {
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
   // --- Initialize Stockfish once ---
-  useEffect(() => {
-    if (engineInitialized.current) return;
-    engineInitialized.current = true;
 
-    (async () => {
-      const wrapper = await getEngine();
-      engineRef.current = wrapper;
-      setEngineReady(true);
-    })();
+  useEffect(() => {
+    return () => {
+      engineRef.current?.terminate();
+      engineRef.current = null;
+    };
   }, []);
+
+  // useEffect(() => {
+  //   if (engineInitialized.current) return;
+  //   engineInitialized.current = true;
+
+  //   (async () => {
+  //     const wrapper = await getEngine();
+  //     engineRef.current = wrapper;
+  //     setEngineReady(true);
+  //   })();
+  // }, []);
 
   // --- Feedback calculation ---
   const getMoveFeedback = (
