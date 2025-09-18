@@ -130,23 +130,3 @@ export class EngineWrapper {
     });
   }
 }
-
-// --- Singleton Engine ---
-let engineInstance: EngineWrapper | null = null;
-let engineInitPromise: Promise<EngineWrapper> | null = null;
-
-export async function getEngine(): Promise<EngineWrapper> {
-  if (engineInstance) return engineInstance;
-  if (engineInitPromise) return engineInitPromise;
-
-  engineInitPromise = (async () => {
-    const worker = new Worker("/stockfish.js");
-    const wrapper = new EngineWrapper(worker);
-    await wrapper.init();
-    engineInstance = wrapper;
-    engineInitPromise = null;
-    return wrapper;
-  })();
-
-  return engineInitPromise;
-}

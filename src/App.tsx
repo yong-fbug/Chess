@@ -4,7 +4,8 @@ import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
 import PreGameModal from "./components/PreGameModal";
 import EvalBar from "./components/EvalBar";
-import { EngineWrapper, EvalScore, getEngine } from "./engine/engine";
+import { EngineWrapper, EvalScore } from "./engine/engine";
+import { getEngine } from "./engine/engineSingleton";
 
 // --- Simple opening book ---
 const openingBook: Record<
