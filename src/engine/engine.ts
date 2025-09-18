@@ -1,3 +1,4 @@
+// src/engine/engine.ts
 export type EvalScore = { cp?: number; mate?: number };
 
 export class EngineWrapper {
@@ -5,16 +6,11 @@ export class EngineWrapper {
   private pendingResolve: ((value: string) => void) | null = null;
   private lastInfo: string | null = null;
 
-  // --- Queue management ---
-  private queue: (() => void)[] = [];
-  private busy = false;
-
   constructor(worker: Worker) {
     this.worker = worker;
     this.worker.addEventListener("message", this.onMessage.bind(this));
   }
 
-  // Initialize Stockfish
   async init() {
     return new Promise<void>((resolve) => {
       const listener = (e: MessageEvent) => {
@@ -29,17 +25,10 @@ export class EngineWrapper {
     });
   }
 
-  // Terminate worker safely
-  terminate() {
-    this.worker.terminate();
-  }
-
-  // Send command to Stockfish
   post(cmd: string) {
     this.worker.postMessage(cmd);
   }
 
-  // Handle messages
   private onMessage(e: MessageEvent) {
     const text = e.data as string;
     if (text.startsWith("info")) this.lastInfo = text;
@@ -49,53 +38,25 @@ export class EngineWrapper {
     }
   }
 
-  // --- Queue helper ---
-  private async runInQueue<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
-        try {
-          const result = await fn();
-          resolve(result);
-        } catch (err) {
-          reject(err);
-        } finally {
-          this.busy = false;
-          this.queue.shift();
-          if (this.queue.length > 0) this.queue[0]!();
-        }
-      });
-      if (!this.busy) {
-        this.busy = true;
-        this.queue[0]!();
-      }
-    });
-  }
-
-  // --- Request best move & evaluation ---
   async getBestAndScore(fen: string, depth = 12) {
-    return this.runInQueue(async () => {
-      this.post(`position fen ${fen}`);
-      this.post(`go depth ${depth}`);
+    this.post(`position fen ${fen}`);
+    this.post(`go depth ${depth}`);
 
-      const raw = await new Promise<string>((resolve) => {
-        this.pendingResolve = resolve;
-      });
-
-      const parts = raw.split(" ");
-      const bestmove = parts[1] || null;
-      const bestFrom = bestmove ? bestmove.slice(0, 2) : null;
-      const bestTo = bestmove ? bestmove.slice(2, 4) : null;
-      const bestPromotion =
-        bestmove && bestmove.length > 4 ? bestmove[4] : undefined;
-
-      return {
-        best: bestmove,
-        bestFrom,
-        bestTo,
-        bestPromotion,
-        score: this.parseLastInfo(this.lastInfo),
-      };
+    const raw = await new Promise<string>((resolve) => {
+      this.pendingResolve = resolve;
     });
+
+    const parts = raw.split(" ");
+    const bestmove = parts[1] || null;
+    const bestFrom = bestmove ? bestmove.slice(0, 2) : null;
+    const bestTo = bestmove ? bestmove.slice(2, 4) : null;
+
+    return {
+      best: bestmove,
+      bestFrom,
+      bestTo,
+      score: this.parseLastInfo(this.lastInfo),
+    };
   }
 
   private parseLastInfo(infoLine: string | null): EvalScore {
@@ -106,47 +67,18 @@ export class EngineWrapper {
     if (mMate) return { mate: parseInt(mMate[1], 10) };
     return { cp: 0 };
   }
-
-  // --- Properly reset engine for new game ---
-  async newGame() {
-    return this.runInQueue(async () => {
-      // Clear internal info
-      this.lastInfo = null;
-      this.pendingResolve = null;
-
-      // Send ucinewgame and wait for ready
-      this.post("ucinewgame");
-      this.post("isready");
-
-      await new Promise<void>((resolve) => {
-        const listener = (e: MessageEvent) => {
-          if (e.data === "readyok") {
-            this.worker.removeEventListener("message", listener);
-            resolve();
-          }
-        };
-        this.worker.addEventListener("message", listener);
-      });
-    });
-  }
 }
 
-// --- Singleton Engine ---
+// --- Singleton ---
 let engineInstance: EngineWrapper | null = null;
-let engineInitPromise: Promise<EngineWrapper> | null = null;
 
 export async function getEngine(): Promise<EngineWrapper> {
   if (engineInstance) return engineInstance;
-  if (engineInitPromise) return engineInitPromise;
 
-  engineInitPromise = (async () => {
-    const worker = new Worker("/stockfish.js");
-    const wrapper = new EngineWrapper(worker);
-    await wrapper.init();
-    engineInstance = wrapper;
-    engineInitPromise = null;
-    return wrapper;
-  })();
+  const worker = new Worker("/stockfish.js"); // from /public
+  const wrapper = new EngineWrapper(worker);
+  await wrapper.init();
 
-  return engineInitPromise;
+  engineInstance = wrapper;
+  return wrapper;
 }

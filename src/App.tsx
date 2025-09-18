@@ -8,23 +8,6 @@ import PreGameModal from "./components/PreGameModal";
 import EvalBar from "./components/EvalBar";
 import { EngineWrapper, EvalScore, getEngine } from "./engine/engine";
 
-// --- Simple opening book ---
-const openingBook: Record<
-  string,
-  { from: string; to: string; promotion?: string }[]
-> = {
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": [
-    { from: "e2", to: "e4" },
-    { from: "d2", to: "d4" },
-    { from: "c2", to: "c4" },
-    { from: "g1", to: "f3" },
-  ],
-  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1": [
-    { from: "e7", to: "e5" },
-    { from: "c7", to: "c5" },
-  ],
-};
-
 export default function App() {
   const chessRef = useRef(new Chess());
 
@@ -33,14 +16,8 @@ export default function App() {
   const [playerSide, setPlayerSide] = useState<"w" | "b" | null>(null);
   const [aiSide, setAiSide] = useState<"w" | "b" | null>(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<{
-    label: string;
-    color: string;
-  } | null>(null);
-  const [engineLastMoveFeedback, setEngineLastMoveFeedback] = useState<{
-    label: string;
-    color: string;
-  } | null>(null);
+  const [playerFeedback, setPlayerFeedback] = useState<string | null>(null);
+  const [engineFeedback, setEngineFeedback] = useState<string | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [aiLevel, setAiLevel] = useState(6);
   const [evalScore, setEvalScore] = useState<EvalScore | null>(null);
@@ -52,58 +29,19 @@ export default function App() {
     from: string;
     to: string;
   } | null>(null);
-  const [showPreGameModal, setShowPreGameModal] = useState(false);
+  const [showPreGameModal, setShowPreGameModal] = useState(true);
 
   // --- Initialize Stockfish once via TanStack Query ---
-  const { data: engine } = useQuery<EngineWrapper>({
+  const {
+    data: engine,
+    isLoading,
+    error,
+  } = useQuery<EngineWrapper>({
     queryKey: ["engine"],
     queryFn: getEngine,
     staleTime: Infinity,
+    gcTime: Infinity,
   });
-
-  // --- Feedback calculation ---
-  const getMoveFeedback = (
-    playedScore: EvalScore,
-    bestScore: EvalScore,
-    side: "w" | "b"
-  ) => {
-    let cpPlayed = playedScore.cp ?? 0;
-    let cpBest = bestScore.cp ?? 0;
-    let matePlayed = playedScore.mate;
-    let mateBest = bestScore.mate;
-
-    if (side === "b") {
-      cpPlayed = -cpPlayed;
-      cpBest = -cpBest;
-      matePlayed = matePlayed !== undefined ? -matePlayed : undefined;
-      mateBest = mateBest !== undefined ? -mateBest : undefined;
-    }
-
-    if (mateBest !== undefined) {
-      if (matePlayed === undefined)
-        return {
-          label: `Missed Mate in ${Math.abs(mateBest)}`,
-          color: "text-orange-500",
-        };
-      if (matePlayed !== mateBest)
-        return {
-          label: `Worse Mate (Mate in ${Math.abs(matePlayed)})`,
-          color: "text-orange-500",
-        };
-      return { label: "Best Move", color: "text-cyan-400" };
-    }
-
-    if (cpBest >= 200 && cpPlayed < 50)
-      return { label: "Missed Win", color: "text-orange-500" };
-    const diff = cpBest - cpPlayed;
-    if (diff >= 300) return { label: "Blunder", color: "text-red-500" };
-    if (diff >= 150) return { label: "Mistake", color: "text-orange-500" };
-    if (diff >= 70) return { label: "Inaccuracy", color: "text-yellow-500" };
-    if (diff <= 10) return { label: "Best Move", color: "text-cyan-400" };
-    if (diff <= 30) return { label: "Excellent", color: "text-green-400" };
-    if (diff <= 60) return { label: "Good", color: "text-lime-400" };
-    return { label: "OK", color: "text-gray-400" };
-  };
 
   // --- AI move mutation ---
   const aiMoveMutation = useMutation({
@@ -113,122 +51,62 @@ export default function App() {
         return;
 
       setIsAiThinking(true);
-      await new Promise((r) => setTimeout(r, 0)); // yield to browser
 
-      const bookMoves = openingBook[chess.fen()];
-      let move: Move | null = null;
-      let feedback: { label: string; color: string } = { label: "", color: "" };
-
-      if (bookMoves?.length) {
-        const bookMove =
-          bookMoves[Math.floor(Math.random() * bookMoves.length)];
-        move = chess.move(bookMove as Move);
-        feedback = { label: "(Book)", color: "text-blue-400" };
-      } else {
-        const ai = await engine.getBestAndScore(
-          chess.fen(),
-          Math.max(6, aiLevel)
-        );
-        if (ai.bestFrom && ai.bestTo) {
-          move = chess.move({
-            from: ai.bestFrom,
-            to: ai.bestTo,
-            promotion: ai.bestPromotion,
-          } as Move);
-          if (move) feedback = getMoveFeedback(ai.score, ai.score, aiSide!);
+      const ai = await engine.getBestAndScore(chess.fen(), aiLevel);
+      if (ai.bestFrom && ai.bestTo) {
+        const move = chess.move({
+          from: ai.bestFrom,
+          to: ai.bestTo,
+          promotion: "q",
+        } as Move);
+        if (move) {
+          setMoveHistory((prev) => [...prev, move]);
+          setFen(chess.fen());
+          setTurn(chess.turn());
+          setEngineLastMove({ from: move.from, to: move.to });
+          setEngineFeedback("Engine played");
         }
       }
 
       setIsAiThinking(false);
-
-      if (move) {
-        setMoveHistory((prev) => [...prev, move]);
-        setFen(chess.fen());
-        setTurn(chess.turn());
-        setEngineLastMove({ from: move.from, to: move.to });
-        setEngineLastMoveFeedback(feedback);
-      }
-
       if (chess.isGameOver()) setGameOver(true);
     },
   });
 
   // --- Player move ---
-  const classifyAndMaybeAi = (from: string, to: string, promotion = "q") => {
+  const handlePlayerMove = (from: string, to: string, promotion = "q") => {
     const chess = chessRef.current;
     if (chess.turn() !== playerSide) return false;
 
-    (async () => {
-      if (!engine) return;
+    const move = chess.move({ from, to, promotion } as Move);
+    if (!move) return false;
 
-      await new Promise((r) => setTimeout(r, 0));
+    setMoveHistory((prev) => [...prev, move]);
+    setFen(chess.fen());
+    setTurn(chess.turn());
+    setPlayerFeedback("You moved");
 
-      const beforeAnalysis = await engine.getBestAndScore(
-        chess.fen(),
-        Math.max(6, aiLevel)
-      );
-      const isBestMove =
-        beforeAnalysis.bestFrom === from &&
-        beforeAnalysis.bestTo === to &&
-        (beforeAnalysis.bestPromotion ?? "q") === promotion;
-
-      const move = chess.move({ from, to, promotion } as Move);
-      if (!move) return;
-
-      setMoveHistory((prev) => [...prev, move]);
-      setFen(chess.fen());
-      setTurn(chess.turn());
-
-      const afterAnalysis = await engine.getBestAndScore(
-        chess.fen(),
-        Math.max(6, aiLevel)
-      );
-      if (isBestMove)
-        setPlayerLastMoveFeedback({
-          label: "Best Move",
-          color: "text-cyan-400",
-        });
-      else
-        setPlayerLastMoveFeedback(
-          getMoveFeedback(
-            afterAnalysis.score,
-            beforeAnalysis.score,
-            playerSide!
-          )
-        );
-
-      setEvalScore(
-        playerSide === "w"
-          ? afterAnalysis.score
-          : {
-              cp: -afterAnalysis.score.cp!,
-              mate: afterAnalysis.score.mate
-                ? -afterAnalysis.score.mate
-                : undefined,
-            }
-      );
-
-      setTimeout(() => aiMoveMutation.mutate(), 50);
-    })();
-
+    setTimeout(() => aiMoveMutation.mutate(), 200);
     return true;
   };
 
+  // --- Hint ---
   const showHint = async () => {
     if (!engine || !playerSide) return;
     setIsAiThinking(true);
     const analysis = await engine.getBestAndScore(
       chessRef.current.fen(),
-      Math.max(6, aiLevel)
+      aiLevel
     );
     setIsAiThinking(false);
     if (analysis.bestFrom && analysis.bestTo) {
       setHintMove({ from: analysis.bestFrom, to: analysis.bestTo });
-      setTimeout(() => setHintMove(null), 3000);
+      setTimeout(() => setHintMove(null), 2000);
     }
   };
 
-  const undoMove = async () => {
+  // --- Undo ---
+  const undoMove = () => {
     const chess = chessRef.current;
     if (moveHistory.length === 0) return;
     chess.undo();
@@ -236,8 +114,8 @@ export default function App() {
     setMoveHistory((prev) => prev.slice(0, -2));
     setFen(chess.fen());
     setTurn(chess.turn());
-    setPlayerLastMoveFeedback(null);
-    setEngineLastMoveFeedback(null);
+    setPlayerFeedback(null);
+    setEngineFeedback(null);
     setGameOver(false);
   };
 
@@ -251,8 +129,8 @@ export default function App() {
     setTurn(chessRef.current.turn());
     setFen(chessRef.current.fen());
     setMoveHistory([]);
-    setPlayerLastMoveFeedback(null);
-    setEngineLastMoveFeedback(null);
+    setPlayerFeedback(null);
+    setEngineFeedback(null);
     setGameOver(false);
     setEvalScore(null);
     setHintMove(null);
@@ -261,43 +139,26 @@ export default function App() {
     if (engine && side === "b") aiMoveMutation.mutate();
   };
 
-  if (!playerSide || !aiSide || showPreGameModal)
+  // --- Loading / Error handling ---
+  if (isLoading) return <p>Loading Stockfish…</p>;
+  if (error) return <p>Failed to load engine</p>;
+
+  if (!playerSide || !aiSide || showPreGameModal) {
     return <PreGameModal onStart={handleStartGame} />;
+  }
 
   return (
     <div className="w-full h-auto bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 flex flex-col items-center justify-between">
       {/* Feedback */}
       <div className="flex flex-col items-center w-full max-w-[400px] text-sm space-y-1">
-        <div className="w-full">
-          <EvalBar score={evalScore} playerSide={playerSide} />
-        </div>
-        <div className="w-full max-w-[400px] overflow-x-auto">
-          <div className="flex space-x-2 text-sm whitespace-nowrap px-1">
-            {moveHistory.map((m, i) => (
-              <span
-                key={i}
-                className={`px-1 rounded ${
-                  i % 2 === 0 ? "text-blue-400" : "text-yellow-400"
-                }`}
-              >
-                {Math.floor(i / 2) + 1}
-                {i % 2 === 0 ? "." : "..."} {m.san}
-              </span>
-            ))}
-          </div>
-        </div>
+        <EvalBar score={evalScore} playerSide={playerSide} />
         <div className="flex justify-center gap-2">
           <span className="text-white font-semibold">
-            You:{" "}
-            <span className={playerLastMoveFeedback?.color ?? "text-white"}>
-              {playerLastMoveFeedback?.label ?? "—"}
-            </span>
+            You: <span className="text-green-400">{playerFeedback ?? "—"}</span>
           </span>
           <span className="text-white font-semibold">
             Engine:{" "}
-            <span className={engineLastMoveFeedback?.color ?? "text-white"}>
-              {engineLastMoveFeedback?.label ?? "—"}
-            </span>
+            <span className="text-yellow-400">{engineFeedback ?? "—"}</span>
           </span>
         </div>
         {gameOver && (
@@ -312,7 +173,7 @@ export default function App() {
         <div className="w-full max-w-[500px] aspect-square">
           <Board
             fen={fen}
-            onPlayerMove={classifyAndMaybeAi}
+            onPlayerMove={handlePlayerMove}
             playerSide={playerSide}
             currentTurn={turn}
             isAiThinking={isAiThinking}
