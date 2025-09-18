@@ -55,7 +55,7 @@ export default function App() {
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
   // --- Initialize Stockfish once via TanStack Query ---
-  const { data: engine, isSuccess: engineReady } = useQuery<EngineWrapper>({
+  const { data: engine } = useQuery<EngineWrapper>({
     queryKey: ["engine"],
     queryFn: getEngine,
     staleTime: Infinity,
