@@ -4,8 +4,7 @@ import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
 import PreGameModal from "./components/PreGameModal";
 import EvalBar from "./components/EvalBar";
-import { EngineWrapper, EvalScore } from "./engine/engine";
-import { getEngine } from "./engine/engineSingleton";
+import { EngineWrapper, EvalScore, getEngine } from "./engine/engine";
 
 // --- Simple opening book ---
 const openingBook: Record<
@@ -27,7 +26,7 @@ const openingBook: Record<
 export default function App() {
   const chessRef = useRef(new Chess());
   const engineRef = useRef<EngineWrapper | null>(null);
-  // const engineInitialized = useRef(false);
+  const engineInitialized = useRef(false);
 
   const [fen, setFen] = useState(chessRef.current.fen());
   const [turn, setTurn] = useState<"w" | "b">(chessRef.current.turn());
@@ -57,24 +56,16 @@ export default function App() {
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
   // --- Initialize Stockfish once ---
-
   useEffect(() => {
-    return () => {
-      engineRef.current?.terminate();
-      engineRef.current = null;
-    };
+    if (engineInitialized.current) return;
+    engineInitialized.current = true;
+
+    (async () => {
+      const wrapper = await getEngine();
+      engineRef.current = wrapper;
+      setEngineReady(true);
+    })();
   }, []);
-
-  // useEffect(() => {
-  //   if (engineInitialized.current) return;
-  //   engineInitialized.current = true;
-
-  //   (async () => {
-  //     const wrapper = await getEngine();
-  //     engineRef.current = wrapper;
-  //     setEngineReady(true);
-  //   })();
-  // }, []);
 
   // --- Feedback calculation ---
   const getMoveFeedback = (
