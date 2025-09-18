@@ -1,4 +1,6 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+// === File: src/App.tsx ===
+import { useRef, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Chess, Move } from "chess.js";
 import { Flag, SearchCheckIcon, RotateCcw } from "lucide-react";
 import Board from "./components/Board";
@@ -25,14 +27,11 @@ const openingBook: Record<
 
 export default function App() {
   const chessRef = useRef(new Chess());
-  const engineRef = useRef<EngineWrapper | null>(null);
-  const engineInitialized = useRef(false);
 
   const [fen, setFen] = useState(chessRef.current.fen());
   const [turn, setTurn] = useState<"w" | "b">(chessRef.current.turn());
   const [playerSide, setPlayerSide] = useState<"w" | "b" | null>(null);
   const [aiSide, setAiSide] = useState<"w" | "b" | null>(null);
-  const [engineReady, setEngineReady] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [playerLastMoveFeedback, setPlayerLastMoveFeedback] = useState<{
     label: string;
@@ -55,17 +54,12 @@ export default function App() {
   } | null>(null);
   const [showPreGameModal, setShowPreGameModal] = useState(false);
 
-  // --- Initialize Stockfish once ---
-  useEffect(() => {
-    if (engineInitialized.current) return;
-    engineInitialized.current = true;
-
-    (async () => {
-      const wrapper = await getEngine();
-      engineRef.current = wrapper;
-      setEngineReady(true);
-    })();
-  }, []);
+  // --- Initialize Stockfish once via TanStack Query ---
+  const { data: engine, isSuccess: engineReady } = useQuery<EngineWrapper>({
+    queryKey: ["engine"],
+    queryFn: getEngine,
+    staleTime: Infinity,
+  });
 
   // --- Feedback calculation ---
   const getMoveFeedback = (
@@ -111,59 +105,53 @@ export default function App() {
     return { label: "OK", color: "text-gray-400" };
   };
 
-  // --- AI move with async yielding ---
-  const maybeAiMove = useCallback(async () => {
-    const chess = chessRef.current;
-    if (
-      !engineRef.current ||
-      !aiSide ||
-      chess.isGameOver() ||
-      chess.turn() !== aiSide
-    )
-      return;
-    setIsAiThinking(true);
+  // --- AI move mutation ---
+  const aiMoveMutation = useMutation({
+    mutationFn: async () => {
+      const chess = chessRef.current;
+      if (!engine || !aiSide || chess.isGameOver() || chess.turn() !== aiSide)
+        return;
 
-    await new Promise((r) => setTimeout(r, 0)); // yield to browser
+      setIsAiThinking(true);
+      await new Promise((r) => setTimeout(r, 0)); // yield to browser
 
-    const bookMoves = openingBook[chess.fen()];
-    let move: Move | null = null;
-    let feedback: { label: string; color: string } = { label: "", color: "" };
+      const bookMoves = openingBook[chess.fen()];
+      let move: Move | null = null;
+      let feedback: { label: string; color: string } = { label: "", color: "" };
 
-    if (bookMoves && bookMoves.length > 0) {
-      const bookMove = bookMoves[Math.floor(Math.random() * bookMoves.length)];
-      move = chess.move(bookMove as Move);
-      feedback = { label: "(Book)", color: "text-blue-400" };
-    } else {
-      const ai = await engineRef.current.getBestAndScore(
-        chess.fen(),
-        Math.max(6, aiLevel)
-      );
-      if (ai.bestFrom && ai.bestTo) {
-        move = chess.move({
-          from: ai.bestFrom,
-          to: ai.bestTo,
-          promotion: ai.bestPromotion,
-        } as Move);
-        if (move) feedback = getMoveFeedback(ai.score, ai.score, aiSide!);
+      if (bookMoves?.length) {
+        const bookMove =
+          bookMoves[Math.floor(Math.random() * bookMoves.length)];
+        move = chess.move(bookMove as Move);
+        feedback = { label: "(Book)", color: "text-blue-400" };
+      } else {
+        const ai = await engine.getBestAndScore(
+          chess.fen(),
+          Math.max(6, aiLevel)
+        );
+        if (ai.bestFrom && ai.bestTo) {
+          move = chess.move({
+            from: ai.bestFrom,
+            to: ai.bestTo,
+            promotion: ai.bestPromotion,
+          } as Move);
+          if (move) feedback = getMoveFeedback(ai.score, ai.score, aiSide!);
+        }
       }
-    }
 
-    setIsAiThinking(false);
+      setIsAiThinking(false);
 
-    if (move) {
-      setMoveHistory((prev) => [...prev, move]);
-      setFen(chess.fen());
-      setTurn(chess.turn());
-      setEngineLastMove({ from: move.from, to: move.to });
-      setEngineLastMoveFeedback(feedback);
-    }
+      if (move) {
+        setMoveHistory((prev) => [...prev, move]);
+        setFen(chess.fen());
+        setTurn(chess.turn());
+        setEngineLastMove({ from: move.from, to: move.to });
+        setEngineLastMoveFeedback(feedback);
+      }
 
-    if (chess.isGameOver()) setGameOver(true);
-  }, [aiSide, aiLevel]);
-
-  useEffect(() => {
-    if (playerSide === "b" && aiSide === "w" && engineReady) maybeAiMove();
-  }, [playerSide, aiSide, engineReady, maybeAiMove]);
+      if (chess.isGameOver()) setGameOver(true);
+    },
+  });
 
   // --- Player move ---
   const classifyAndMaybeAi = (from: string, to: string, promotion = "q") => {
@@ -171,11 +159,11 @@ export default function App() {
     if (chess.turn() !== playerSide) return false;
 
     (async () => {
-      if (!engineRef.current) return;
+      if (!engine) return;
 
-      await new Promise((r) => setTimeout(r, 0)); // yield
+      await new Promise((r) => setTimeout(r, 0));
 
-      const beforeAnalysis = await engineRef.current.getBestAndScore(
+      const beforeAnalysis = await engine.getBestAndScore(
         chess.fen(),
         Math.max(6, aiLevel)
       );
@@ -191,7 +179,7 @@ export default function App() {
       setFen(chess.fen());
       setTurn(chess.turn());
 
-      const afterAnalysis = await engineRef.current.getBestAndScore(
+      const afterAnalysis = await engine.getBestAndScore(
         chess.fen(),
         Math.max(6, aiLevel)
       );
@@ -220,16 +208,16 @@ export default function App() {
             }
       );
 
-      setTimeout(() => maybeAiMove(), 50); // small delay
+      setTimeout(() => aiMoveMutation.mutate(), 50);
     })();
 
     return true;
   };
 
   const showHint = async () => {
-    if (!engineRef.current || !playerSide) return;
+    if (!engine || !playerSide) return;
     setIsAiThinking(true);
-    const analysis = await engineRef.current.getBestAndScore(
+    const analysis = await engine.getBestAndScore(
       chessRef.current.fen(),
       Math.max(6, aiLevel)
     );
@@ -255,7 +243,7 @@ export default function App() {
 
   const handleResign = () => setGameOver(true);
 
-  const handleStartGame = async (side: "w" | "b", level: number) => {
+  const handleStartGame = (side: "w" | "b", level: number) => {
     chessRef.current.reset();
     setAiLevel(level);
     setPlayerSide(side);
@@ -270,17 +258,7 @@ export default function App() {
     setHintMove(null);
     setShowPreGameModal(false);
 
-    if (engineRef.current) {
-      engineRef.current.post("ucinewgame");
-
-      if (side === "b") maybeAiMove();
-    } else {
-      const wrapper = await getEngine();
-      engineRef.current = wrapper;
-      setEngineReady(true);
-
-      if (side === "b") maybeAiMove();
-    }
+    if (engine && side === "b") aiMoveMutation.mutate();
   };
 
   if (!playerSide || !aiSide || showPreGameModal)
