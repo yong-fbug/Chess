@@ -140,7 +140,7 @@ export async function getEngine(): Promise<EngineWrapper> {
   if (engineInitPromise) return engineInitPromise;
 
   engineInitPromise = (async () => {
-    const worker = new Worker("/stockfish.js");
+    const worker = new Worker("/stockfish.worker.js");
     const wrapper = new EngineWrapper(worker);
     await wrapper.init();
     engineInstance = wrapper;
