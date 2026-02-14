@@ -1,14 +1,25 @@
-// Worker runs in its own context, so no exports here!
+// stockfish.worker.js
 importScripts("/stockfish.js");
 
-onmessage = function (e) {
-  if (self.STOCKFISH) {
-    STOCKFISH.postMessage(e.data);
-  }
-};
+let STOCKFISH;
 
-if (typeof STOCKFISH !== "undefined") {
-  STOCKFISH.onmessage = function (event) {
+function initStockfish() {
+  // Create the Stockfish instance
+  STOCKFISH = STOCKFISH || new STOCKFISH(); // some builds export as function
+
+  // Optional: Reduce memory usage
+  STOCKFISH.postMessage("uci"); // initialize
+  STOCKFISH.postMessage("setoption name Threads value 1"); // 1 thread only
+  STOCKFISH.postMessage("setoption name Hash value 32"); // 32MB hash (default 128+ is heavy)
+
+  STOCKFISH.onmessage = (event) => {
     postMessage(event.data);
   };
 }
+
+initStockfish();
+
+onmessage = function (e) {
+  if (!STOCKFISH) initStockfish();
+  STOCKFISH.postMessage(e.data);
+};
