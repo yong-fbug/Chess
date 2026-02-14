@@ -6,7 +6,7 @@ let globalEngine: EngineWrapper | null =
 
 export async function getEngine(): Promise<EngineWrapper> {
   if (globalEngine) return globalEngine;
-  const worker = new Worker("/stockfish.js");
+  const worker = new Worker("/stockfish.worker.js");
   const wrapper = new EngineWrapper(worker);
   await wrapper.init();
   (globalThis as any).__stockfishEngine = wrapper; // survive hot reload
