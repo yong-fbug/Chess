@@ -1,35 +1,36 @@
+// stockfish.worker.js
 importScripts("/stockfish.js");
 
 let STOCKFISH;
 
-// Initialize Stockfish safely
 function initStockfish() {
   if (STOCKFISH) return;
 
-  // Some builds require new STOCKFISH() constructor
+  // Use constructor if needed
   STOCKFISH =
     STOCKFISH ||
     new STOCKFISH({
-      // Optional: explicitly pass memory limits (64KiB pages)
-      wasmMemory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
-      locateFile: (file) => `/stockfish.wasm`, // ensure WASM loads correctly
+      wasmMemory: new WebAssembly.Memory({
+        initial: 128,
+        maximum: 256,
+        shared: false,
+      }),
+      locateFile: (file) => `/stockfish.wasm`,
     });
 
-  // Limit memory usage for browser
-  STOCKFISH.postMessage("uci"); // init UCI
-  STOCKFISH.postMessage("setoption name Threads value 1"); // 1 thread only
-  STOCKFISH.postMessage("setoption name Hash value 16"); // 16MB hash (browser safe)
+  // Reduce memory usage for browser
+  STOCKFISH.postMessage("uci");
+  STOCKFISH.postMessage("setoption name Threads value 1"); // single thread
+  STOCKFISH.postMessage("setoption name Hash value 16"); // 16MB hash
 
-  // Relay Stockfish messages to main thread
-  STOCKFISH.onmessage = (event) => {
-    postMessage(event.data);
-  };
+  // Relay messages to main thread
+  STOCKFISH.onmessage = (event) => postMessage(event.data);
 }
 
 // Initialize immediately
 initStockfish();
 
-// Receive commands from main thread
+// Relay main thread messages
 onmessage = function (e) {
   if (!STOCKFISH) initStockfish();
   STOCKFISH.postMessage(e.data);
